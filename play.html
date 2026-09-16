@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Play</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+  #msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#4ff0c8;font:600 18px/1.5 ui-monospace,system-ui,sans-serif;text-align:center;
+    padding:24px;white-space:pre-wrap;background:rgba(0,0,0,.6);pointer-events:none}
+</style>
+</head>
+<body>
+<video id="v" playsinline controls autoplay></video>
+<div id="msg">Requesting transcode…</div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  const q = new URLSearchParams(location.search);
+  const BASE = q.get("b"), TOKEN = q.get("t"), KEY = q.get("k");
+  const v = document.getElementById("v"), msg = document.getElementById("msg");
+  const show = t => { msg.textContent = t; msg.style.display = "flex"; };
+  const hide = () => { msg.style.display = "none"; };
+  if(!BASE || !TOKEN || !KEY){ show("Missing params (b/t/k)"); return; }
+
+  // Match Plex Web's real request. hasMDE=1 -> must call /decision first.
+  // directStreamAudio=0 -> transcode AC3/DTS to AAC (sound). HLS so hls.js can play it.
+  const CID = "firefly-" + Math.random().toString(36).slice(2);
+  const SID = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const common = {
+    hasMDE: "1", path: KEY, mediaIndex: "0", partIndex: "0",
+    protocol: "hls", fastSeek: "1", directPlay: "0", directStream: "0",
+    subtitleSize: "100", audioBoost: "100", location: "lan",
+    addDebugOverlay: "0", autoAdjustQuality: "0", directStreamAudio: "0",
+    mediaBufferSize: "102400", session: SID, subtitles: "none",
+    "Accept-Language": "en",
+    "X-Plex-Session-Identifier": SID,
+    "X-Plex-Client-Profile-Extra":
+      "append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=h264&audioCodec=aac&protocol=hls)",
+    "X-Plex-Incomplete-Segments": "1",
+    "X-Plex-Product": "Plex Web", "X-Plex-Version": "4.160.0",
+    "X-Plex-Client-Identifier": CID,
+    "X-Plex-Platform": "Chrome", "X-Plex-Platform-Version": "137.0",
+    "X-Plex-Features": "external-media,indirect-media",
+    "X-Plex-Model": "standalone", "X-Plex-Device": "Windows", "X-Plex-Device-Name": "Firefly",
+    "X-Plex-Token": TOKEN
+  };
+  const qs = o => Object.keys(o).map(k => encodeURIComponent(k)+"="+encodeURIComponent(o[k])).join("&");
+  const decisionUrl = BASE + "/video/:/transcode/universal/decision?" + qs(common);
+  const startUrl    = BASE + "/video/:/transcode/universal/start.m3u8?" + qs(common);
+  const withTok = u => u.indexOf("X-Plex-Token=") >= 0 ? u
+      : u + (u.indexOf("?") < 0 ? "?" : "&") + "X-Plex-Token=" + encodeURIComponent(TOKEN);
+
+  v.addEventListener("playing", hide);
+  document.addEventListener("click", ()=>{ v.muted=false; v.play().catch(()=>{}); });
+
+  async function safeText(r){ try{ return (await r.text()).replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,200); }catch(_){ return ""; } }
+
+  function play(){
+    if(window.Hls && Hls.isSupported()){
+      const hls = new Hls({ xhrSetup:(xhr,url)=>{ xhr.open("GET", withTok(url), true); } });
+      hls.on(Hls.Events.ERROR, (e,d)=>{
+        if(d && d.fatal){
+          const code = d.response ? (" HTTP "+(d.response.code||"?")) : "";
+          show("HLS " + d.type + " / " + (d.details||"") + code);
+        }
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ v.play().catch(()=>show("Tap / click to play")); });
+      hls.loadSource(startUrl); hls.attachMedia(v);
+    } else if(v.canPlayType("application/vnd.apple.mpegurl")){
+      v.src = startUrl; v.play().catch(()=>show("Tap / click to play"));
+    } else { show("HLS not supported here"); }
+  }
+
+  async function run(){
+    // Step 1: MDE decision (required when hasMDE=1)
+    try{
+      const r = await fetch(decisionUrl, { cache:"no-store" });
+      if(!r.ok){ show("Decision refused:\nHTTP "+r.status+" "+r.statusText+"\n"+(await safeText(r))); return; }
+    }catch(e){
+      show("Decision unreachable:\n"+(e && e.message ? e.message : e)); return;
+    }
+    // Step 2: play the transcoded HLS
+    hide(); play();
+  }
+
+  if(window.Hls){ run(); }
+  else {
+    let waited=0;
+    const iv=setInterval(()=>{
+      if(window.Hls){ clearInterval(iv); run(); }
+      else if((waited+=200)>6000){ clearInterval(iv); show("hls.js failed to load (no internet / CDN blocked)"); }
+    },200);
+  }
+})();
+</script>
+</body>
+</html>

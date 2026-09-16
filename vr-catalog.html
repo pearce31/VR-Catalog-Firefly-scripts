@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05070a">
+<title>VR Catalog</title>
+<style>
+  :root{
+    --bg:#05070a; --panel:#0d1219; --line:#1c2530; --line2:#26313d;
+    --ink:#c8d2dc; --muted:#6d7c8a; --hud:#4ff0c8; --amber:#ffb347; --danger:#ff6b6b;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:var(--mono);-webkit-tap-highlight-color:transparent;overflow:hidden}
+  #gl{position:fixed;inset:0;display:none;touch-action:none;background:#000}
+  #config{position:fixed;inset:0;overflow-y:auto;padding:22px 16px 40px}
+  #config::before{content:"";position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(120% 80% at 50% -10%,rgba(79,240,200,.05),transparent 60%);}
+  .wrap{max-width:620px;margin:0 auto;position:relative}
+  header.top{display:flex;align-items:baseline;gap:12px;padding-bottom:6px;
+    border-bottom:1px solid var(--line);margin-bottom:18px}
+  header.top h1{font-size:15px;letter-spacing:.32em;text-transform:uppercase;
+    margin:0;font-weight:600}
+  header.top h1 b{color:var(--hud);font-weight:600}
+  header.top .v{color:var(--muted);font-size:11px;letter-spacing:.2em}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;margin:0 0 20px}
+  .hint code{color:var(--hud)}
+  .sec{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);
+    margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  .app{display:flex;gap:8px;align-items:center;background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
+  .app .sw{width:14px;height:34px;border-radius:3px;flex:none}
+  .app .fields{flex:1;min-width:0;display:grid;gap:6px}
+  .app input{width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:7px 8px;border-radius:6px}
+  .app input:focus{outline:none;border-color:var(--hud)}
+  .app input::placeholder{color:#41505c}
+  .app .lbl{font-size:13px;color:#e6edf3}
+  .app button.del{flex:none;background:transparent;border:1px solid var(--line2);
+    color:var(--muted);border-radius:6px;width:34px;height:34px;font-size:16px;cursor:pointer}
+  .app button.del:active{color:var(--danger);border-color:var(--danger)}
+  button.ghost{width:100%;background:transparent;border:1px dashed var(--line2);
+    color:var(--muted);border-radius:8px;padding:11px;font-family:var(--mono);
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+  button.ghost:active{border-color:var(--hud);color:var(--hud)}
+  .tune{display:grid;grid-template-columns:1fr;gap:14px;background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;padding:14px 14px 16px}
+  .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px}
+  .row label{font-size:12px;color:var(--ink)}
+  .row .val{font-variant-numeric:tabular-nums;color:var(--hud);font-size:12px;min-width:56px;text-align:right}
+  .row input[type=range]{grid-column:1/-1;-webkit-appearance:none;appearance:none;
+    height:3px;background:var(--line2);border-radius:2px;margin:2px 0}
+  .row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+    border-radius:50%;background:var(--hud);border:3px solid var(--bg);cursor:pointer}
+  .row .sub{grid-column:1/-1;color:var(--muted);font-size:11px;margin-top:-2px}
+  .launch{position:sticky;bottom:0;margin-top:26px;padding-top:14px;
+    background:linear-gradient(to top,var(--bg) 65%,transparent)}
+  #enter{width:100%;background:var(--hud);color:#04120e;border:none;border-radius:10px;
+    padding:16px;font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.2em;
+    text-transform:uppercase;cursor:pointer}
+  #enter:active{filter:brightness(.92)}
+  #enter:disabled{background:var(--line2);color:var(--muted)}
+  .warn{color:var(--amber);font-size:11px;text-align:center;margin:10px 0 0;line-height:1.6}
+  #exitbar{position:fixed;top:0;left:0;right:0;display:none;z-index:5;
+    justify-content:center;gap:10px;padding:8px;background:rgba(5,7,10,.6)}
+  #exitbar button{background:var(--panel);border:1px solid var(--line2);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:8px 14px;border-radius:6px}
+  #hud{position:fixed;top:6px;left:50%;transform:translateX(-50%);display:none;z-index:6;
+    font-size:11px;line-height:1.5;color:var(--hud);background:rgba(5,7,10,.72);
+    border:1px solid var(--line2);border-radius:6px;padding:5px 9px;pointer-events:none;
+    white-space:pre;text-align:center}
+  #hud.bad{color:var(--amber);border-color:var(--amber)}
+</style>
+</head>
+<body>
+
+<div id="config">
+  <div class="wrap">
+    <header class="top"><h1>VR&nbsp;<b>CATALOG</b></h1><span class="v">v1</span></header>
+    <p class="hint">A stereo VR catalog. Add sources, tap <b>Enter VR</b>, drop the phone in.
+      <b>Look</b> to aim the reticle. <b>Mouse:</b> left-click opens, right-click / back-button
+      goes back a level, wheel scrolls. <b>No mouse:</b> tap = open, long-press = back, or set a
+      Dwell time below to select by holding your gaze.</p>
+    <div class="sec">Sources</div>
+    <div id="srclist"></div>
+    <button class="ghost" id="addtile">+ Add tile (label + URL)</button>
+    <button class="ghost" id="addfeed" style="margin-top:8px">+ Add catalog feed (JSON URL)</button>
+    <button class="ghost" id="addplex" style="margin-top:8px">+ Add Plex server</button>
+    <button class="ghost" id="addchaturbate" style="margin-top:8px">+ Add Chaturbate tag</button>
+    <button class="ghost" id="addxcloud" style="margin-top:8px">+ Add xCloud (Game Pass cloud)</button>
+    <button class="ghost" id="addapp" style="margin-top:8px">+ Add app (package name)</button>
+    <div class="sec">Chaturbate proxy (optional)</div>
+    <input id="cbproxy" placeholder="http://127.0.0.1:8899/?url="
+      style="width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 10px;border-radius:8px;box-sizing:border-box">
+    <div class="hint" style="margin:6px 0 0">Point this at your cb-proxy.js (e.g. <code>http://127.0.0.1:8899/?url=</code>). Blank = use public proxies.</div>
+    <div class="sec">Player URL (APK → Edge)</div>
+    <input id="playerbase" placeholder="http://127.0.0.1:8080/"
+      style="width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 10px;border-radius:8px;box-sizing:border-box">
+    <div class="hint" style="margin:6px 0 0">In the APK, set this to the server that serves <code>play.html</code> so Plex opens in Edge. Blank = same site.</div>
+    <div class="sec">Optics &amp; input</div>
+    <div class="tune" id="tune"></div>
+    <label style="display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px;color:var(--ink);cursor:pointer">
+      <input type="checkbox" id="locktoggle" style="width:18px;height:18px;flex:none">
+      Lock panel (no head tracking) &mdash; sits still on glasses; mouse wheel scrolls, click selects
+    </label>
+    <div class="launch">
+      <button id="enter">Enter VR</button>
+      <p class="warn" id="warn"></p>
+    </div>
+  </div>
+</div>
+
+<canvas id="gl"></canvas>
+<div id="hud"></div>
+<div id="exitbar">
+  <button id="btnRecenter">Recenter</button>
+  <button id="btnExit">Exit VR</button>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   VR Catalog – with Chaturbate tag live browsing (no JSON required)
+   ============================================================ */
+
+const store = (() => {
+  let mem = {};
+  const ok = (() => { try { localStorage.setItem("_t","1"); localStorage.removeItem("_t"); return true; } catch(e){ return false; } })();
+  return {
+    get(k, d){ try { const v = ok ? localStorage.getItem(k) : mem[k]; return v==null ? d : JSON.parse(v); } catch(e){ return d; } },
+    set(k, v){ const s = JSON.stringify(v); try { ok ? localStorage.setItem(k,s) : (mem[k]=s); } catch(e){ mem[k]=s; } }
+  };
+})();
+
+const DEFAULT_TUNE = {
+  ipd: 62, k1: 0.34, k2: 0.18, fov: 62,
+  spacing: 26, dwell: 1100, lens: 0.5, roll: 0, lock: 0, shift: 0
+};
+let tune = Object.assign({}, DEFAULT_TUNE, store.get("tune", {}));
+
+const PALETTE=["#4ff0c8","#5ad2ff","#ffb347","#ff6b6b","#a78bfa","#7ee787","#f472b6","#facc15"];
+const DEFAULT_SOURCES = [
+  { kind:"plex", title:"Plex", base:"http://192.168.1.10:32400", token:"", color:"#e5a00d" },
+  { kind:"tile", title:"Xbox Remote", url:"https://www.xbox.com/en-US/play/consoles", color:"#107c10" },
+];
+let sources = store.get("sources", DEFAULT_SOURCES);
+function saveSources(){ store.set("sources", sources); }
+
+const $ = s => document.querySelector(s);
+const el = (t, props={}, kids=[]) => { const n=document.createElement(t); Object.assign(n, props); for(const k of kids) n.appendChild(k); return n; };
+function field(ph,val,on){ return el("input",{value:val||"",placeholder:ph,oninput:e=>on(e.target.value)}); }
+
+function renderSources(){
+  const host=$("#srclist"); host.innerHTML="";
+  sources.forEach((sc,i)=>{
+    const sw=el("div",{className:"sw"}); sw.style.background=sc.color||"#4ff0c8";
+    const tag=el("div",{textContent:sc.kind.toUpperCase(), style:"font-size:10px;letter-spacing:.22em;color:var(--muted)"});
+    const fields=[tag, field("Title",sc.title,v=>{sc.title=v;saveSources();})];
+    if(sc.kind==="tile") fields.push(field("URL to open",sc.url,v=>{sc.url=v.trim();saveSources();}));
+    if(sc.kind==="app"){
+      fields.push(field("Package name (e.g. com.example.app)",sc.pkg,v=>{sc.pkg=v.trim();saveSources();}));
+      fields.push(field("Custom intent:// (optional, overrides package)",sc.intent,v=>{sc.intent=v.trim();saveSources();}));
+    }
+    if(sc.kind==="feed") fields.push(field("Feed URL (JSON [{title,thumb,launch}])",sc.feed,v=>{sc.feed=v.trim();saveSources();}));
+    if(sc.kind==="plex"){
+      fields.push(field("Plex base URL (http://ip:32400)",sc.base,v=>{sc.base=v.trim();saveSources();}));
+      const tk=field("X-Plex-Token (stays on this device)",sc.token,v=>{sc.token=v.trim();saveSources();});
+      tk.type="password"; fields.push(tk);
+    }
+    if(sc.kind==="chaturbate-tag"){
+      fields.push(field("Tag (e.g. milf)",sc.tagPath,v=>{sc.tagPath=v.trim();saveSources();}));
+      fields.push(field("Genders f/m/t/c (optional)",sc.genders,v=>{sc.genders=v.trim();saveSources();}));
+    }
+    if(sc.kind==="xcloud"){
+      fields.push(field("Collection id (optional — leave blank for default)",sc.siglId,v=>{sc.siglId=v.trim();saveSources();}));
+    }
+    const del=el("button",{className:"del",textContent:"\u00d7",title:"Remove",
+      onclick:()=>{ sources.splice(i,1); saveSources(); renderSources(); }});
+    host.appendChild(el("div",{className:"app"},[sw,el("div",{className:"fields"},fields),del]));
+  });
+}
+function addSource(kind){
+  const c=PALETTE[sources.length%PALETTE.length];
+  if(kind==="tile") sources.push({kind:"tile",title:"New tile",url:"",color:c});
+  if(kind==="app") sources.push({kind:"app",title:"App",pkg:"",intent:"",color:c});
+  if(kind==="feed") sources.push({kind:"feed",title:"New feed",feed:"",color:c});
+  if(kind==="plex") sources.push({kind:"plex",title:"Plex",base:"http://:32400",token:"",color:c});
+  if(kind==="xcloud") sources.push({kind:"xcloud",title:"xCloud",siglId:"",color:c});
+  if(kind==="chaturbate-tag") sources.push({kind:"chaturbate-tag", title:"Chaturbate", tagPath:"", genders:"", color:c});
+  saveSources(); renderSources();
+}
+function initImportButton(){
+  $("#addtile").onclick=()=>addSource("tile");
+  $("#addfeed").onclick=()=>addSource("feed");
+  $("#addplex").onclick=()=>addSource("plex");
+  $("#addchaturbate").onclick=()=>addSource("chaturbate-tag");
+  $("#addxcloud").onclick=()=>addSource("xcloud");
+  $("#addapp").onclick=()=>addSource("app");
+}
+
+let nodes = [];
+let navStack = [];
+let navBusy = false, navMsg = "";
+
+function homeNodes(){
+  return sources.map(sc => ({ title:sc.title, color:sc.color, thumb:null, act: ()=> enterSource(sc) }));
+}
+function setNodes(list){ nodes=list; gazeIndex=-1; dwellStart=0; scrollStart=0; if(gl) rebuildTiles(); }
+function goHome(){ navStack=[]; setNodes(homeNodes()); }
+function pushLevel(list){ if(!list.length){ flash("Nothing here"); return; } navStack.push(nodes); setNodes(list); }
+function goBack(){ if(navStack.length){ setNodes(navStack.pop()); flash("Back"); } else recenter(); }
+
+// ---------- FIXED openUrl ----------
+function openUrl(url){
+  if(!url){ flash("No URL set"); return; }
+  console.log("Opening URL:", url);
+  lastLaunch=performance.now(); dwellStart=performance.now();
+  // In the APK shell, hand EVERYTHING to Edge (where the firefly userscript runs) —
+  // including Chaturbate, so cam rooms get the depth shader instead of the flat player.
+  if(window.Android && Android.openInEdge){ try{ if(Android.openInEdge(url)) return; }catch(e){} }
+  // In a browser: open Chaturbate in a new tab to keep the catalog alive.
+  if(url.includes('chaturbate.com')){
+    try{
+      const w = window.open(url, '_blank');
+      if(!w || w.closed || typeof w.closed=='undefined'){ window.location.href = url; }
+      return;
+    }catch(e){ window.location.href = url; return; }
+  }
+  try{ window.location.href=url; }catch(e){ flash("Open failed"); }
+}
+
+async function enterSource(sc){
+  if(sc.kind==="tile"){ openUrl(sc.url); return; }
+  if(sc.kind==="app"){
+    // In the APK shell, launch the app natively by package (no browser, no Play Store).
+    if(sc.pkg && window.Android && Android.launch){
+      try{ if(Android.launch(sc.pkg)){ return; } }catch(e){}
+    }
+    const intent = sc.intent || ("intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package="+sc.pkg+";end");
+    openUrl(intent); return;
+  }
+  if(sc.kind==="chaturbate-tag"){
+    await enterChaturbateTag(sc);
+    return;
+  }
+  if(sc.kind==="xcloud"){
+    await enterXCloud(sc);
+    return;
+  }
+  navBusy=true; navMsg="Loading "+sc.title+"\u2026";
+  try{
+    if(sc.kind==="feed"){ const items=await loadFeed(sc.feed); pushLevel(items.map(itemNode)); }
+    else if(sc.kind==="plex"){ await enterPlex(sc); }
+  }catch(e){ flash("Failed: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+
+// ---- Chaturbate tag scraping (using CORS proxy) ----
+async function enterChaturbateTag(sc){
+  navBusy=true; navMsg="Loading "+(sc.tagPath||"")+"\u2026";
+  try{
+    let tag=(sc.tagPath||"").trim();
+    if(tag.startsWith("/")) tag=tag.slice(1);
+    if(tag.startsWith("tag/")) tag=tag.slice(4);
+    const qp=new URLSearchParams({ limit:"90", offset:"0", require_fingerprint:"false" });
+    if(tag) qp.set("hashtags", tag);
+    if(sc.genders) qp.set("genders", sc.genders);
+    const api="https://chaturbate.com/api/ts/roomlist/room-list/?"+qp.toString();
+    // Try several proxies until one returns real JSON. Set a custom proxy in
+    // localStorage key "cbProxy" (e.g. "http://192.168.0.50:8899/?url=") to use your NucBox.
+    const custom = (function(){ try{ return localStorage.getItem("cbProxy"); }catch(_){ return null; } })();
+    const builders = [];
+    if(custom) builders.push(u => custom + encodeURIComponent(u));
+    builders.push(
+      u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
+      u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+      u => "https://corsproxy.io/?url=" + encodeURIComponent(u)
+    );
+    let data=null, lastErr="none";
+    for(const mk of builders){
+      try{
+        const resp = await fetch(mk(api), { cache:"no-store" });
+        if(!resp.ok){ lastErr="HTTP "+resp.status; continue; }
+        const text = await resp.text();
+        let d=null;
+        try{ d=JSON.parse(text); }
+        catch(_){ try{ d=JSON.parse(JSON.parse(text).contents); }catch(__){ lastErr="non-JSON (age-gate)"; continue; } }
+        if(d && (d.rooms || d.results || Array.isArray(d))){ data=d; break; }
+        lastErr="no rooms field";
+      }catch(e){ lastErr=(e && e.message) ? e.message : (""+e); }
+    }
+    if(!data) throw new Error("all proxies failed: "+lastErr);
+    const rooms = data.rooms || data.results || (Array.isArray(data)?data:[]);
+    if(!rooms.length) throw new Error("0 rooms. top keys: "+Object.keys(data).join(",").slice(0,90));
+    const items = rooms.map(r=>{
+      const u = r.username || r.slug || r.name || "";
+      const thumb = r.img || r.image_url || r.thumbnail_url || r.img_url ||
+                    (u ? "https://roomimg.stream.highwebmedia.com/ri/"+u+".jpg" : null);
+      const label = (r.display_name || u || "\u2014");
+      return { u, title:label, thumb };
+    }).filter(x=>x.u);
+    if(!items.length) throw new Error("rooms had no usernames (field name?)");
+    pushLevel(items.map(it=>({ title:it.title, thumb:it.thumb, color:"#2a3441",
+      act: ()=> openUrl("https://chaturbate.com/"+it.u+"/") })));
+  }catch(e){
+    flash("CB: "+(e.message||e));
+    console.error("Chaturbate room-list error:", e);
+  }
+  navBusy=false; navMsg="";
+}
+
+// Try direct fetch first, then fall back through proxies (returns parsed JSON).
+async function proxiedJson(url){
+  const custom=(function(){try{return localStorage.getItem("cbProxy")}catch(_){return null}})();
+  const builders=[ u=>u ];
+  if(custom) builders.push(u=>custom+encodeURIComponent(u));
+  builders.push(
+    u=>"https://api.codetabs.com/v1/proxy/?quest="+encodeURIComponent(u),
+    u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
+    u=>"https://corsproxy.io/?url="+encodeURIComponent(u)
+  );
+  let last="none";
+  for(const mk of builders){
+    try{
+      const r=await fetch(mk(url),{cache:"no-store"});
+      if(!r.ok){ last="HTTP "+r.status; continue; }
+      const t=await r.text();
+      try{ return JSON.parse(t); }
+      catch(_){ try{ return JSON.parse(JSON.parse(t).contents); }catch(__){ last="non-JSON"; continue; } }
+    }catch(e){ last=(e&&e.message)||(""+e); }
+  }
+  throw new Error(last);
+}
+
+// xCloud (Game Pass cloud) catalog. Public endpoints, no login token.
+// sigls -> list of product ids ; displaycatalog -> titles + art.
+async function enterXCloud(sc){
+  navBusy=true; navMsg="Loading xCloud\u2026";
+  try{
+    const sigl = (sc.siglId||"").trim() || "e78d9a61-5ef4-43af-b400-edba1250b18e";
+    const listUrl = "https://catalog.gamepass.com/sigls/v3?id="+sigl
+      +"&market=US&language=en-US&subscriptionContext=none&platformContext=Cloud%3AXGPUWEB";
+    const arr = await proxiedJson(listUrl);
+    const ids = (Array.isArray(arr)?arr:[]).map(x=>x&&x.id).filter(Boolean)
+                 .filter(id=>/^[0-9A-Za-z]{10,}$/.test(id));   // product big-ids (skip the sigl GUID)
+    if(!ids.length) throw new Error("no product ids ("+(Array.isArray(arr)?arr.length:0)+" items)");
+    navMsg="xCloud: "+ids.length+" games\u2026";
+    const items=[];
+    for(let i=0;i<ids.length && i<220;i+=20){
+      const batch=ids.slice(i,i+20);
+      const dUrl="https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds="
+        +batch.join(",")+"&market=US&languages=en-US&fieldsTemplate=Details";
+      let d; try{ d=await proxiedJson(dUrl); }catch(_){ continue; }
+      const prods=(d&&d.Products)||[];
+      prods.forEach(pr=>{
+        const pid=pr.ProductId;
+        const lp=(pr.LocalizedProperties&&pr.LocalizedProperties[0])||{};
+        const title=lp.ProductTitle||lp.ShortTitle||pid;
+        let img=null;
+        const imgs=lp.Images||[];
+        const pick=imgs.find(x=>/Poster|BoxArt|SuperHeroArt|TitledHeroArt|Logo/i.test(x.ImagePurpose))||imgs[0];
+        if(pick&&pick.Uri) img=pick.Uri.startsWith("//")?("https:"+pick.Uri):pick.Uri;
+        const slug=(title||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+        if(pid) items.push({ title, thumb:img, launch:"https://www.xbox.com/play/games/"+slug+"/"+pid });
+      });
+    }
+    if(!items.length) throw new Error("got ids but no game details");
+    items.sort((a,b)=>a.title.localeCompare(b.title));
+    pushLevel(items.map(it=>({ title:it.title, thumb:it.thumb, color:"#107c10", act:()=>openUrl(it.launch) })));
+  }catch(e){ flash("xCloud: "+(e.message||e)); console.error("xCloud:",e); }
+  navBusy=false; navMsg="";
+}
+
+function itemNode(it){ return { title:it.title||"\u2014", color:"#2a3441", thumb:it.thumb||null, act: ()=> openUrl(it.launch) }; }
+async function loadFeed(url){
+  const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw new Error("HTTP "+r.status);
+  const j=await r.json(); if(!Array.isArray(j)) throw new Error("feed not an array"); return j;
+}
+
+async function plexGet(base, path, token){
+  const sep = path.includes("?")?"&":"?";
+  const r = await fetch(base+path+sep+"X-Plex-Token="+encodeURIComponent(token),
+                        { headers:{Accept:"application/json"}, cache:"no-store" });
+  if(!r.ok) throw new Error("Plex HTTP "+r.status);
+  return r.json();
+}
+let _plexMid=null;
+async function plexMachineId(sc){
+  if(_plexMid!=null) return _plexMid;
+  try{ const j=await plexGet(sc.base,"/",sc.token); _plexMid=(j.MediaContainer&&j.MediaContainer.machineIdentifier)||""; }catch(e){ _plexMid=""; }
+  return _plexMid;
+}
+function plexWebUrl(sc, mid, key){ return sc.base+"/web/index.html#!/server/"+mid+"/details?key="+encodeURIComponent(key); }
+const OK_CONTAINER=["mp4","mov","m4v","webm"];
+const OK_VCODEC=["h264","avc"];
+const OK_ACODEC=["aac","mp3","opus","vorbis"];
+function plexPlayable(t){ return t==="movie"||t==="episode"||t==="clip"||t==="track"; }
+async function plexChildren(sc, mid, it){
+  navBusy=true; navMsg="Loading "+(it.title||"")+"\u2026";
+  try{
+    const childPath = (it.key && it.key.indexOf("/children")>=0)
+      ? it.key : ("/library/metadata/"+it.ratingKey+"/children");
+    const j = await plexGet(sc.base, childPath, sc.token);
+    const kids = (j.MediaContainer && j.MediaContainer.Metadata) || [];
+    if(!kids.length){ flash("Nothing inside "+(it.title||"")); navBusy=false; navMsg=""; return; }
+    const list = kids.map(k => {
+      let label = k.title || "\u2014";
+      if(k.type==="season") label = k.title || ("Season "+(k.index||""));
+      else if(k.type==="episode") label = (k.index?("E"+k.index+" "):"") + (k.title||"");
+      return {
+        title: label,
+        thumb: k.thumb ? (sc.base+k.thumb+"?X-Plex-Token="+encodeURIComponent(sc.token)) : null,
+        color: "#2a3441",
+        act: plexPlayable(k.type) ? (()=>plexOpen(sc, mid, k)) : (()=>plexChildren(sc, mid, k))
+      };
+    });
+    pushLevel(list);
+  }catch(e){ flash("Plex: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+async function plexOpen(sc, mid, it){
+  navBusy=true; navMsg="Opening "+(it.title||"")+"\u2026";
+  try{
+    let direct=null, transcode=true;
+    try{
+      const j=await plexGet(sc.base, it.key, sc.token);
+      const md=j.MediaContainer&&j.MediaContainer.Metadata&&j.MediaContainer.Metadata[0];
+      const media=md&&md.Media&&md.Media[0];
+      const part=media&&media.Part&&media.Part[0];
+      if(part&&part.key){
+        direct=sc.base+part.key+"?X-Plex-Token="+encodeURIComponent(sc.token);
+        const cont=((part.container||media.container||"")+"").toLowerCase();
+        const streams=part.Stream||[];
+        const v=streams.find(x=>x.streamType===1), a=streams.find(x=>x.streamType===2);
+        const vok=!v || OK_VCODEC.includes(((v.codec||"")+"").toLowerCase());
+        const aok=!a || OK_ACODEC.includes(((a.codec||"")+"").toLowerCase());
+        transcode = !(OK_CONTAINER.includes(cont) && vok && aok);
+      }
+    }catch(e){}
+    if(!transcode && direct){ openUrl(direct); }
+    else {
+      const pb=(function(){try{return (localStorage.getItem("playerBase")||"").trim()}catch(_){return ""}})();
+      const baseHref = pb ? pb.replace(/\/*$/,"/") : new URL(".", location.href).href;
+      const play = baseHref + "play.html"
+        + "?b="+encodeURIComponent(sc.base)
+        + "&t="+encodeURIComponent(sc.token)
+        + "&k="+encodeURIComponent(it.key);
+      openUrl(play);
+    }
+  }finally{ navBusy=false; navMsg=""; }
+}
+async function enterPlex(sc){
+  if(!sc.base || !sc.token){ flash("Set Plex base URL + token in Settings"); return; }
+  const j = await plexGet(sc.base, "/library/sections", sc.token);
+  const secs = (j.MediaContainer && j.MediaContainer.Directory) || [];
+  const list = secs.map(sec => ({ title:sec.title, color:"#e5a00d", thumb:null, act: ()=> enterPlexSection(sc, sec) }));
+  pushLevel(list);
+}
+async function enterPlexSection(sc, sec){
+  navBusy=true; navMsg="Loading "+sec.title+"\u2026";
+  try{
+    const mid = await plexMachineId(sc);
+    const j = await plexGet(sc.base, "/library/sections/"+sec.key+"/all", sc.token);
+    const items = (j.MediaContainer && j.MediaContainer.Metadata) || [];
+    const list = items.slice(0,80).map(it => ({
+      title: it.title, color:"#2a3441",
+      thumb: it.thumb ? (sc.base+it.thumb+"?X-Plex-Token="+encodeURIComponent(sc.token)) : null,
+      act: plexPlayable(it.type) ? (()=>plexOpen(sc, mid, it)) : (()=>plexChildren(sc, mid, it))
+    }));
+    pushLevel(list);
+  }catch(e){ flash("Plex: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+
+const TUNE_META = [
+  ["ipd","Eye separation","mm",40,80,1],
+  ["fov","Field of view","°",45,90,1],
+  ["k1","Distortion k1","",0,0.9,0.01],
+  ["k2","Distortion k2","",0,0.6,0.01],
+  ["lens","Lens center","",0.30,0.70,0.01],
+  ["spacing","Tile spacing","°",14,40,1],
+  ["shift","Image converge","%",-40,40,1],
+  ["roll","Roll fix","°",-180,180,90],
+  ["dwell","Dwell select","ms",0,2500,50]
+];
+function renderTune(){
+  const host = $("#tune"); host.innerHTML = "";
+  for(const [key,name,unit,min,max,step] of TUNE_META){
+    const val = el("span",{className:"val",textContent:tune[key]+(unit?(" "+unit):"")});
+    const rng = el("input",{type:"range",min,max,step,value:tune[key]});
+    rng.oninput = e => {
+      tune[key] = parseFloat(e.target.value);
+      val.textContent = tune[key] + (unit?(" "+unit):"");
+      store.set("tune", tune);
+    };
+    const sub = key==="dwell" ? el("div",{className:"sub",textContent:"0 = button-only (no auto-select)"})
+      : (key==="lens" ? el("div",{className:"sub",textContent:"nudge if the image doesn't fuse"}) : null);
+    const row = el("div",{className:"row"},[el("label",{textContent:name}),val,rng]);
+    if(sub) row.appendChild(sub);
+    host.appendChild(row);
+  }
+}
+function checkSupport(){
+  const w = $("#warn"); const bits=[];
+  if(!window.WebGLRenderingContext) bits.push("WebGL unavailable");
+  if(!window.DeviceOrientationEvent) bits.push("no orientation sensor");
+  if(!window.isSecureContext)
+    bits.push("⚠ NOT a secure context ("+location.protocol.replace(":","")+") — head tracking is BLOCKED. Serve over https or http://localhost.");
+  w.textContent = bits.join("  ·  ");
+}
+function initPlayerBase(){
+  const inp=$("#playerbase"); if(!inp) return;
+  try{ inp.value = localStorage.getItem("playerBase") || ""; }catch(_){}
+  inp.oninput = e => { const v=e.target.value.trim();
+    try{ if(v) localStorage.setItem("playerBase", v); else localStorage.removeItem("playerBase"); }catch(_){} };
+}
+function initCbProxy(){
+  const inp=$("#cbproxy"); if(!inp) return;
+  try{ inp.value = localStorage.getItem("cbProxy") || ""; }catch(_){}
+  inp.oninput = e => {
+    const v=e.target.value.trim();
+    try{ if(v) localStorage.setItem("cbProxy", v); else localStorage.removeItem("cbProxy"); }catch(_){}
+  };
+}
+function initLock(){
+  const cb=$("#locktoggle"); if(!cb) return;
+  cb.checked = !!tune.lock;
+  cb.onchange = e => { tune.lock = e.target.checked?1:0; store.set("tune", tune); };
+}
+renderSources(); renderTune(); checkSupport(); initImportButton(); initCbProxy(); initLock(); initPlayerBase();
+
+/* ============================================================
+   MATH (unchanged)
+   ============================================================ */
+const M = {
+  ident:()=>[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+  mul(a,b){ const o=new Array(16);
+    for(let c=0;c<4;c++)for(let r=0;r<4;r++){ let s=0;
+      for(let k=0;k<4;k++) s+=a[k*4+r]*b[c*4+k]; o[c*4+r]=s; } return o; },
+  translate(x,y,z){ const m=M.ident(); m[12]=x;m[13]=y;m[14]=z; return m; },
+  perspective(fovyDeg,asp,n,f){ const t=1/Math.tan(fovyDeg*Math.PI/360); const nf=1/(n-f);
+    return [t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)*nf,-1, 0,0,2*f*n*nf,0]; },
+  fromQuat(q){ const [x,y,z,w]=q; const x2=x+x,y2=y+y,z2=z+z;
+    const xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2,wx=w*x2,wy=w*y2,wz=w*z2;
+    return [1-(yy+zz),xy+wz,xz-wy,0, xy-wz,1-(xx+zz),yz+wx,0, xz+wy,yz-wx,1-(xx+yy),0, 0,0,0,1]; },
+  rotY(a){ const c=Math.cos(a),s=Math.sin(a); return [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]; },
+  transpose3(m){ return [m[0],m[4],m[8],0, m[1],m[5],m[9],0, m[2],m[6],m[10],0, 0,0,0,1]; }
+};
+const Q = {
+  mul(a,b){ const[ax,ay,az,aw]=a,[bx,by,bz,bw]=b;
+    return [ aw*bx+ax*bw+ay*bz-az*by,
+             aw*by-ax*bz+ay*bw+az*bx,
+             aw*bz+ax*by-ay*bx+az*bw,
+             aw*bw-ax*bx-ay*by-az*bz ]; },
+  axis(x,y,z,ang){ const h=ang/2,s=Math.sin(h); return [x*s,y*s,z*s,Math.cos(h)]; },
+  fromEulerYXZ(x,y,z){
+    const c1=Math.cos(x/2),c2=Math.cos(y/2),c3=Math.cos(z/2);
+    const s1=Math.sin(x/2),s2=Math.sin(y/2),s3=Math.sin(z/2);
+    return [ s1*c2*c3+c1*s2*s3,
+             c1*s2*c3-s1*c2*s3,
+             c1*c2*s3-s1*s2*c3,
+             c1*c2*c3+s1*s2*s3 ]; }
+};
+
+function orientationQuat(alpha,beta,gamma,screenDeg){
+  const _x=(beta||0)*Math.PI/180, _y=(gamma||0)*Math.PI/180, _z=(alpha||0)*Math.PI/180;
+  const _o=(screenDeg||0)*Math.PI/180;
+  let q = Q.fromEulerYXZ(_x,_z,-_y);
+  q = Q.mul(q, Q.axis(1,0,0,-Math.PI/2));
+  q = Q.mul(q, Q.axis(0,0,1,-_o));
+  return q;
+}
+function forwardVec(q){
+  const [x,y,z,w]=q;
+  const vx=0,vy=0,vz=-1;
+  const ix =  w*vx + y*vz - z*vy;
+  const iy =  w*vy + z*vx - x*vz;
+  const iz =  w*vz + x*vy - y*vx;
+  const iw = -x*vx - y*vy - z*vz;
+  return [ ix*w + iw*-x + iy*-z - iz*-y,
+           iy*w + iw*-y + iz*-x - ix*-z,
+           iz*w + iw*-z + ix*-y - iy*-x ];
+}
+
+let refQuat = null;
+function recenter(){
+  refQuat = orientationQuat(curAlpha, curBeta, curGamma, screenAngle());
+  if(tune.roll) refQuat = Q.mul(refQuat, Q.axis(0,0,1,tune.roll*Math.PI/180));
+  flash("Recentered");
+}
+function qslerp(a,b,t){
+  let [ax,ay,az,aw]=a,[bx,by,bz,bw]=b;
+  let d=ax*bx+ay*by+az*bz+aw*bw;
+  if(d<0){ bx=-bx;by=-by;bz=-bz;bw=-bw; d=-d; }
+  if(d>0.9995){ const x=ax+t*(bx-ax),y=ay+t*(by-ay),z=az+t*(bz-az),w=aw+t*(bw-aw);
+    const l=Math.hypot(x,y,z,w)||1; return [x/l,y/l,z/l,w/l]; }
+  const th=Math.acos(d), sn=Math.sin(th);
+  const wa=Math.sin((1-t)*th)/sn, wb=Math.sin(t*th)/sn;
+  return [ax*wa+bx*wb, ay*wa+by*wb, az*wa+bz*wb, aw*wa+bw*wb];
+}
+let smoothQ=null, glitchN=0;
+function quatAngle(a,b){ let d=Math.abs(a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]); if(d>1)d=1; return 2*Math.acos(d); }
+function smoothView(tgt){
+  if(!smoothQ){ smoothQ=tgt; return tgt; }
+  const d=quatAngle(smoothQ,tgt);
+  if(d>0.6 && glitchN<3){ glitchN++; return smoothQ; }
+  glitchN=0;
+  const t = d>0.15 ? 0.9 : 0.4;
+  smoothQ=qslerp(smoothQ,tgt,t);
+  return smoothQ;
+}
+function getViewQuat(){
+  let q = orientationQuat(curAlpha, curBeta, curGamma, screenAngle());
+  if(tune.roll) q = Q.mul(q, Q.axis(0,0,1,tune.roll*Math.PI/180));
+  if(!refQuat) return q;
+  const [rx,ry,rz,rw] = refQuat;
+  return Q.mul(q, [-rx, -ry, -rz, rw]);
+}
+
+/* ============================================================
+   RENDERER (unchanged)
+   ============================================================ */
+let gl, canvas, sceneProg, distProg, quadBuf, eyeL, eyeR, curTgt;
+let texCache=new Map(), reticleTex, reticleCanvas, reticleCtx;
+let running=false, raf=0;
+
+const SCENE_VS = `attribute vec2 aPos; attribute vec2 aUV; varying vec2 vUV;
+uniform mat4 uMVP; void main(){ vUV=aUV; gl_Position = uMVP * vec4(aPos,0.0,1.0); }`;
+const SCENE_FS = `precision mediump float; varying vec2 vUV; uniform sampler2D uTex; uniform float uAlpha;
+void main(){ vec4 c=texture2D(uTex,vUV); gl_FragColor=vec4(c.rgb, c.a*uAlpha); }`;
+const DIST_VS = `attribute vec2 aPos; varying vec2 vUV;
+void main(){ vUV = aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0); }`;
+const DIST_FS = `precision mediump float; varying vec2 vUV; uniform sampler2D uTex;
+uniform vec2 uCenter; uniform float uK1; uniform float uK2;
+void main(){
+  vec2 c = vUV - uCenter;
+  float r2 = dot(c,c);
+  float f = 1.0 + uK1*r2 + uK2*r2*r2;
+  vec2 uv = uCenter + c*f;
+  if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){ gl_FragColor=vec4(0.0,0.0,0.0,1.0); return; }
+  gl_FragColor = texture2D(uTex, uv);
+}`;
+
+function compile(type,src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function program(vs,fs){ const p=gl.createProgram();
+  gl.attachShader(p,compile(gl.VERTEX_SHADER,vs)); gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p; }
+
+function tileTexture(node){
+  const t=gl.createTexture();
+  drawTileCanvas(t,node,null);
+  if(node.thumb){
+    const img=new Image(); img.crossOrigin="anonymous";
+    img.onload=()=>{ try{ if(gl) drawTileCanvas(t,node,img); }catch(e){} };
+    img.onerror=()=>{};
+    img.src=node.thumb;
+  }
+  return t;
+}
+function drawTileCanvas(tex,node,img){
+  const c=document.createElement("canvas"); c.width=512; c.height=Math.round(512*0.64);
+  const x=c.getContext("2d"); const col=node.color||"#4ff0c8";
+  if(img){
+    const ar=img.width/img.height, car=c.width/c.height; let dw,dh;
+    if(ar>car){ dh=c.height; dw=dh*ar; } else { dw=c.width; dh=dw/ar; }
+    x.fillStyle="#000"; x.fillRect(0,0,c.width,c.height);
+    x.drawImage(img,(c.width-dw)/2,(c.height-dh)/2,dw,dh);
+    const g=x.createLinearGradient(0,c.height*0.45,0,c.height);
+    g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(0,0,0,0.88)");
+    x.fillStyle=g; x.fillRect(0,c.height*0.45,c.width,c.height*0.55);
+  } else {
+    x.fillStyle="#0b0f15"; x.fillRect(0,0,c.width,c.height);
+    const glyph=(node.title||"?").trim().charAt(0).toUpperCase()||"?";
+    x.fillStyle=col; x.font="bold 150px ui-monospace,monospace";
+    x.textAlign="center"; x.textBaseline="middle"; x.globalAlpha=0.9;
+    x.fillText(glyph,c.width/2,c.height/2-26); x.globalAlpha=1;
+  }
+  x.strokeStyle=col; x.lineWidth=8; x.strokeRect(6,6,c.width-12,c.height-12);
+  x.fillStyle=col; x.fillRect(6,6,c.width-12,14);
+  x.fillStyle="#e6edf3"; x.font="34px ui-monospace,monospace";
+  x.textAlign="center"; x.textBaseline="alphabetic";
+  let lbl=node.title||"\u2014"; if(lbl.length>18) lbl=lbl.slice(0,17)+"\u2026";
+  x.fillText(lbl,c.width/2,c.height-52);
+  gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+}
+function rebuildTiles(){
+  texCache.forEach(t=>{ try{ gl.deleteTexture(t); }catch(e){} });
+  texCache.clear();
+}
+function tileTexFor(i){
+  if(texCache.has(i)) return texCache.get(i);
+  const t=tileTexture(nodes[i]); texCache.set(i,t); return t;
+}
+function prewarm(){
+  if(!gl||!nodes.length) return;
+  const a=Math.max(0,scrollStart-2), b=Math.min(nodes.length-1, scrollStart+visN()+1);
+  for(let i=a;i<=b;i++) tileTexFor(i);
+}
+function makeReticleTexture(){
+  reticleCanvas=document.createElement("canvas"); reticleCanvas.width=reticleCanvas.height=128;
+  reticleCtx=reticleCanvas.getContext("2d");
+  reticleTex=gl.createTexture();
+}
+function updateReticle(progress, active){
+  const x=reticleCtx, s=128, cx=64, cy=64;
+  x.clearRect(0,0,s,s);
+  x.strokeStyle= active ? "#ffb347" : "rgba(255,255,255,0.85)";
+  x.lineWidth=6; x.beginPath(); x.arc(cx,cy,10,0,Math.PI*2); x.stroke();
+  x.fillStyle= active ? "#ffb347" : "rgba(255,255,255,0.85)";
+  x.beginPath(); x.arc(cx,cy,3,0,Math.PI*2); x.fill();
+  if(progress>0){ x.strokeStyle="#4ff0c8"; x.lineWidth=7;
+    x.beginPath(); x.arc(cx,cy,26,-Math.PI/2, -Math.PI/2 + progress*Math.PI*2); x.stroke(); }
+  gl.bindTexture(gl.TEXTURE_2D,reticleTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,reticleCanvas);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+}
+function initGL(){
+  canvas=$("#gl");
+  gl=canvas.getContext("webgl",{antialias:true,alpha:false});
+  if(!gl){ alert("WebGL unavailable on this browser."); return false; }
+  sceneProg=program(SCENE_VS,SCENE_FS);
+  distProg=program(DIST_VS,DIST_FS);
+  const verts=new Float32Array([-1,-1,0,1, 1,-1,1,1, 1,1,1,0, -1,-1,0,1, 1,1,1,0, -1,1,0,0]);
+  quadBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+  goHome();
+  makeReticleTexture(); updateReticle(0,false);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  return true;
+}
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=Math.floor(window.innerWidth*dpr);
+  canvas.height=Math.floor(window.innerHeight*dpr);
+  canvas.style.width=window.innerWidth+"px"; canvas.style.height=window.innerHeight+"px";
+  buildFBO(Math.floor(canvas.width/2), canvas.height);
+}
+function makeEyeTarget(w,h){
+  const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  const depth=gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER,depth);
+  gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,w,h);
+  const fb=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,depth);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return { fb, tex, depth, _w:w, _h:h };
+}
+function buildFBO(w,h){
+  for(const t of [eyeL,eyeR]) if(t){ gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); gl.deleteRenderbuffer(t.depth); }
+  eyeL=makeEyeTarget(w,h); eyeR=makeEyeTarget(w,h);
+}
+
+let curAlpha=0,curBeta=90,curGamma=0, haveSensor=false, orientMode=null;
+function screenAngle(){ return (screen.orientation&&screen.orientation.angle)||window.orientation||0; }
+function onOrient(e){
+  if(e.alpha==null && e.beta==null) return;
+  const abs = /absolute/.test(e.type) || e.absolute===true;
+  if(orientMode===null) orientMode = abs ? "abs" : "rel";
+  if((orientMode==="abs") !== abs) return;
+  haveSensor=true;
+  curAlpha=e.alpha||0; curBeta=e.beta==null?90:e.beta; curGamma=e.gamma||0;
+}
+
+const PANEL_D=3.4;
+const TILE_HW=0.62, TILE_HH=0.40, MAX_VIS=5;
+function STRIDE(){ return PANEL_D*Math.tan(Math.max(8,tune.spacing)*Math.PI/180); }
+let gazeIndex=-1, dwellStart=0, lastLaunch=0, scrollStart=0, lockSlot=-1, selSlot=-1;
+let mouseSeen=false, mouseX=0, mouseY=0;
+
+function visN(){ return Math.min(nodes.length, MAX_VIS); }
+function maxScroll(){ return Math.max(0, nodes.length - visN()); }
+function slotX(slot){ return (slot-(visN()-1)/2)*STRIDE(); }
+function gazeOnPanel(q){
+  const f=forwardVec(q);
+  if(f[2] >= -1e-3) return null;
+  const t = -PANEL_D / f[2];
+  return { x: t*f[0], y: t*f[1] };
+}
+function drawTiles(vp, eyeSign, q){
+  const view=M.transpose3(M.fromQuat(q));
+  const eye=M.translate(eyeSign*(tune.ipd/1000)/2,0,0);
+  const asp=(curTgt._w)/(curTgt._h);
+  const proj=M.perspective(tune.fov,asp,0.05,50);
+  const vpMat=M.mul(proj, M.mul(eye, view));
+
+  gl.useProgram(sceneProg);
+  const aPos=gl.getAttribLocation(sceneProg,"aPos");
+  const aUV=gl.getAttribLocation(sceneProg,"aUV");
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,16,0);
+  gl.enableVertexAttribArray(aUV);  gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,16,8);
+  const uMVP=gl.getUniformLocation(sceneProg,"uMVP");
+  const uAlpha=gl.getUniformLocation(sceneProg,"uAlpha");
+  gl.uniform1i(gl.getUniformLocation(sceneProg,"uTex"),0);
+
+  gl.disable(gl.DEPTH_TEST);
+  const vn=visN();
+  for(let slot=0; slot<vn; slot++){
+    const idx=scrollStart+slot; if(idx<0||idx>=nodes.length) continue;
+    let m=M.translate(slotX(slot),0,-PANEL_D);
+    m=M.mul(m,[TILE_HW,0,0,0, 0,TILE_HH,0,0, 0,0,1,0, 0,0,0,1]);
+    gl.uniformMatrix4fv(uMVP,false,M.mul(vpMat,m));
+    gl.uniform1f(uAlpha, (idx===gazeIndex)?1.0:0.55);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tileTexFor(idx));
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+  if(!tune.lock){
+    const rm=M.mul(M.translate(0,0,-1.4),[0.05,0,0,0, 0,0.05,0,0, 0,0,1,0, 0,0,0,1]);
+    gl.uniformMatrix4fv(uMVP,false,M.mul(proj,M.mul(eye,rm)));
+    gl.uniform1f(uAlpha,1.0);
+    gl.disable(gl.DEPTH_TEST);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,reticleTex);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+  }
+  gl.enable(gl.DEPTH_TEST);
+}
+function distortEye(tgt, dstX, lensCenterX){
+  gl.useProgram(distProg);
+  const aPos=gl.getAttribLocation(distProg,"aPos");
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,16,0);
+  gl.uniform1i(gl.getUniformLocation(distProg,"uTex"),0);
+  gl.uniform2f(gl.getUniformLocation(distProg,"uCenter"),lensCenterX,0.5);
+  gl.uniform1f(gl.getUniformLocation(distProg,"uK1"),tune.k1);
+  gl.uniform1f(gl.getUniformLocation(distProg,"uK2"),tune.k2);
+  gl.viewport(dstX,0,canvas.width/2,canvas.height);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,tgt.tex);
+  gl.drawArrays(gl.TRIANGLES,0,6);
+}
+function renderEye(tgt, eyeSign, q){
+  curTgt=tgt;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,tgt.fb);
+  gl.viewport(0,0,tgt._w,tgt._h);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0.02,0.03,0.05,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  drawTiles(null,eyeSign,q);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+}
+function mulV(m,v){ return [
+  m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+m[12]*v[3],
+  m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+m[13]*v[3],
+  m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+m[14]*v[3],
+  m[3]*v[0]+m[7]*v[1]+m[11]*v[2]+m[15]*v[3] ]; }
+function updateGaze(now, q){
+  const vn=visN();
+  // Locked mode: the CENTER tile is always selected (scroll to bring a tile to
+  // center, then click). Tracked mode: gaze aims, click activates. No cursor map.
+  if(tune.lock){
+    // Selection is driven by the WHEEL (see onWheel) via selSlot — mousemove is
+    // unreliable in fullscreen on some devices, so we don't depend on cursor position.
+    if(selSlot<0) selSlot=Math.floor((vn-1)/2);
+    if(selSlot>vn-1) selSlot=vn-1;
+    lockSlot = selSlot;
+  } else {
+    const g = gazeOnPanel(q);
+    if(!g){ gazeIndex=-1; lockSlot=-1; updateReticle(0,false); return; }
+    const slotF = g.x/STRIDE() + (vn-1)/2;
+    const onRow = Math.abs(g.y) < TILE_HH*1.7;
+    if(lockSlot<0){
+      const sl=Math.round(slotF);
+      if(onRow && sl>=0 && sl<=vn-1 && Math.abs(slotF-sl)<0.5) lockSlot=sl;
+    } else if(!onRow || Math.abs(slotF-lockSlot)>0.85){ lockSlot=-1; }
+  }
+  const idx = lockSlot>=0 ? scrollStart+lockSlot : -1;
+  const hit = (idx>=0 && idx<nodes.length) ? idx : -1;
+  if(hit!==gazeIndex){ gazeIndex=hit; dwellStart=hit>=0?now:0; }
+  let prog=0;
+  if(gazeIndex>=0 && !navBusy && !mouseSeen && !tune.lock && tune.dwell>0){
+    prog=Math.min(1,(now-dwellStart)/tune.dwell);
+    if(prog>=1 && now-lastLaunch>1200){ activate(gazeIndex); }
+  }
+  updateReticle(prog, gazeIndex>=0);
+}
+function updateHUD(q){
+  const h=$("#hud"); if(!h) return;
+  if(performance.now()<flashUntil){ h.style.display="block"; h.className="bad"; h.textContent=flashMsg; return; }
+  if(h.style.display==="none") return;
+  if(!haveSensor){ h.className="bad"; h.textContent="SENSOR: none — head tracking off\n"+(window.isSecureContext?"waiting for orientation events…":"insecure context: "+location.protocol); }
+  else if(navBusy){ h.className=""; h.textContent=navMsg||"loading…"; }
+  else {
+    const f=forwardVec(q); const yaw=Math.atan2(f[0], -f[2])*180/Math.PI;
+    h.className=""; h.textContent="sensor ok  lvl"+navStack.length+"  α"+curAlpha.toFixed(0)+" β"+curBeta.toFixed(0)+" γ"+curGamma.toFixed(0)+"  yaw"+yaw.toFixed(0)+"°";
+  }
+}
+function frame(now){
+  if(!running) return;
+  const q = tune.lock ? [0,0,0,1] : smoothView(getViewQuat());   // locked = panel fixed ahead
+  prewarm();
+  updateGaze(now, q);
+  updateHUD(q);
+  gl.clearColor(0,0,0,1); gl.viewport(0,0,canvas.width,canvas.height); gl.clear(gl.COLOR_BUFFER_BIT);
+  const sh = (tune.shift||0)/100 * (canvas.width/2);   // + = eyes converge, - = diverge
+  renderEye(eyeL,-1,q); gl.viewport(0,0,canvas.width,canvas.height); distortEye(eyeL, sh, tune.lens);
+  renderEye(eyeR,+1,q); gl.viewport(0,0,canvas.width,canvas.height); distortEye(eyeR, canvas.width/2 - sh, 1.0-tune.lens);
+  raf=requestAnimationFrame(frame);
+}
+
+function activate(i){
+  if(navBusy) return;
+  const n=nodes[i]; if(!n) return;
+  lastLaunch=performance.now(); dwellStart=performance.now();
+  try{ n.act(); }catch(e){ flash("Error"); console.error(e); }
+}
+let flashUntil=0, flashMsg="";
+function flash(msg){ flashMsg=msg; flashUntil=performance.now()+3200; document.title=msg; }
+
+let pressT=0, pressTimer=0, longFired=false;
+function onDown(e){ if(e && e.button===2) return;
+  if(e && e.pointerType==="mouse") mouseSeen=true;
+  pressT=performance.now(); longFired=false;
+  pressTimer=setTimeout(()=>{ longFired=true; goBack(); }, 650); }
+function onUp(e){ clearTimeout(pressTimer);
+  if(longFired) return;
+  if(performance.now()-pressT<650 && gazeIndex>=0) activate(gazeIndex); }
+function onContext(e){ mouseSeen=true; e.preventDefault(); goBack(); }
+function onAux(e){ if(e.button===3||e.button===4){ e.preventDefault(); goBack(); } }
+let _moveN=0;
+function onMove(e){ mouseSeen=true; _moveN++;
+  mouseX = (e.clientX!=null?e.clientX:mouseX);
+  mouseY = (e.clientY!=null?e.clientY:mouseY); }
+let _dbg=null;
+function dbg(t){
+  if(!_dbg){ _dbg=document.createElement("div");
+    _dbg.style.cssText="position:fixed;top:2px;left:2px;z-index:99;font:11px monospace;color:#4ff0c8;background:rgba(0,0,0,.7);padding:3px 6px;white-space:pre;pointer-events:none";
+    document.body.appendChild(_dbg); }
+  _dbg.textContent=t;
+}
+// Where the mouse cursor lands on the tile panel (in metres), matching gazeOnPanel().
+function mousePanel(){
+  const W=window.innerWidth, H=window.innerHeight, half=W/2;
+  const base = mouseX < half ? 0 : half;
+  const ndcX = ((mouseX - base)/half)*2 - 1;
+  const ndcY = -((mouseY / H)*2 - 1);
+  const tanY = Math.tan(tune.fov*Math.PI/360);
+  const tanX = tanY * (half/H);
+  return { x: PANEL_D*ndcX*tanX, y: PANEL_D*ndcY*tanY };
+}
+function onWheel(e){ mouseSeen=true; e.preventDefault();
+  if(!nodes.length) return;
+  const dir = e.deltaY>0 ? 1 : -1;
+  if(tune.lock){
+    const vn=visN();
+    if(selSlot<0) selSlot=Math.floor((vn-1)/2);
+    if(dir>0){ if(selSlot<vn-1) selSlot++; else if(scrollStart<maxScroll()) scrollStart++; }
+    else     { if(selSlot>0)    selSlot--; else if(scrollStart>0)          scrollStart--; }
+  } else {
+    scrollStart = Math.max(0, Math.min(maxScroll(), scrollStart+dir));
+  } }
+
+async function enterVR(){
+  try {
+    if(typeof DeviceOrientationEvent!=="undefined" && DeviceOrientationEvent.requestPermission){
+      const p=await DeviceOrientationEvent.requestPermission(); if(p!=="granted"){ flash("Motion permission denied"); }
+    }
+  } catch(e){}
+  $("#config").style.display="none";
+  $("#gl").style.display="block";
+  $("#exitbar").style.display="flex";
+  $("#hud").style.display="block";
+  setTimeout(()=>{ $("#exitbar").style.display="none"; }, 3500);
+  setTimeout(()=>{ if(haveSensor) $("#hud").style.display="none"; }, 8000);
+  if(!initGL()){ exitVR(); return; }
+  resize();
+  window.addEventListener("deviceorientationabsolute",onOrient,true);
+  window.addEventListener("deviceorientation",onOrient,true);
+  window.addEventListener("resize",resize);
+  canvas.addEventListener("pointerdown",onDown);
+  canvas.addEventListener("pointerup",onUp);
+  canvas.addEventListener("contextmenu",onContext);
+  canvas.addEventListener("auxclick",onAux);
+  canvas.addEventListener("wheel",onWheel,{passive:false});
+  canvas.addEventListener("mousemove",onMove);
+  window.addEventListener("mousemove",onMove,true);
+  window.addEventListener("pointermove",onMove,true);
+  mouseX=window.innerWidth/2; mouseY=window.innerHeight/2;
+  try{ await document.documentElement.requestFullscreen(); }catch(e){}
+  try{ if(screen.orientation&&screen.orientation.lock) await screen.orientation.lock("landscape"); }catch(e){}
+  setTimeout(()=>{
+    if(running){
+      refQuat = orientationQuat(curAlpha, curBeta, curGamma, screenAngle());
+      if(tune.roll) refQuat = Q.mul(refQuat, Q.axis(0,0,1,tune.roll*Math.PI/180));
+      flash("VR Ready");
+    }
+  }, 500);
+  running=true; raf=requestAnimationFrame(frame);
+}
+function exitVR(){
+  running=false; cancelAnimationFrame(raf);
+  window.removeEventListener("deviceorientationabsolute",onOrient,true);
+  window.removeEventListener("deviceorientation",onOrient,true);
+  window.removeEventListener("resize",resize);
+  try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
+  try{ if(screen.orientation&&screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+  $("#gl").style.display="none";
+  $("#exitbar").style.display="none";
+  $("#hud").style.display="none";
+  $("#config").style.display="block";
+}
+
+$("#enter").onclick=enterVR;
+$("#btnExit").onclick=exitVR;
+$("#btnRecenter").onclick=recenter;
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&running){ exitVR(); return; }
+  if(!running) return;
+  const vn=visN();
+  if(e.key==="ArrowRight"){
+    if(selSlot<vn-1) selSlot++; else if(scrollStart<maxScroll()) scrollStart++;
+    e.preventDefault();
+  } else if(e.key==="ArrowLeft"){
+    if(selSlot>0) selSlot--; else if(scrollStart>0) scrollStart--;
+    e.preventDefault();
+  } else if(e.key==="Enter"||e.key===" "){
+    if(gazeIndex>=0) activate(gazeIndex); e.preventDefault();
+  } else if(e.key==="Backspace"){ goBack(); e.preventDefault(); }
+});
+</script>
+</body>
+</html>
