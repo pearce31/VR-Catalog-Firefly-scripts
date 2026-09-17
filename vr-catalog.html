@@ -89,6 +89,9 @@
     <button class="ghost" id="addtile">+ Add tile (label + URL)</button>
     <button class="ghost" id="addfeed" style="margin-top:8px">+ Add catalog feed (JSON URL)</button>
     <button class="ghost" id="addplex" style="margin-top:8px">+ Add Plex server</button>
+    <button class="ghost" id="addplexfree" style="margin-top:8px">+ Add Plex Free (Movies / TV)</button>
+    <button class="ghost" id="addemby" style="margin-top:8px">+ Add Emby server</button>
+    <button class="ghost" id="addjellyfin" style="margin-top:8px">+ Add Jellyfin server</button>
     <button class="ghost" id="addchaturbate" style="margin-top:8px">+ Add Chaturbate tag</button>
     <button class="ghost" id="addxcloud" style="margin-top:8px">+ Add xCloud (Game Pass cloud)</button>
     <button class="ghost" id="addapp" style="margin-top:8px">+ Add app (package name)</button>
@@ -96,6 +99,10 @@
     <input id="cbproxy" placeholder="http://127.0.0.1:8899/?url="
       style="width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 10px;border-radius:8px;box-sizing:border-box">
     <div class="hint" style="margin:6px 0 0">Point this at your cb-proxy.js (e.g. <code>http://127.0.0.1:8899/?url=</code>). Blank = use public proxies.</div>
+    <div class="sec">Media proxy (Emby / Jellyfin over HTTPS)</div>
+    <input id="mediaproxy" placeholder="http://127.0.0.1:8877/?url="
+      style="width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 10px;border-radius:8px;box-sizing:border-box">
+    <div class="hint" style="margin:6px 0 0">For Emby/Jellyfin on self-signed HTTPS: run <code>media-proxy.js</code> and put its URL here. Blank = direct.</div>
     <div class="sec">Player URL (APK → Edge)</div>
     <input id="playerbase" placeholder="http://127.0.0.1:8080/"
       style="width:100%;background:#070b10;border:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 10px;border-radius:8px;box-sizing:border-box">
@@ -167,8 +174,22 @@ function renderSources(){
     if(sc.kind==="feed") fields.push(field("Feed URL (JSON [{title,thumb,launch}])",sc.feed,v=>{sc.feed=v.trim();saveSources();}));
     if(sc.kind==="plex"){
       fields.push(field("Plex base URL (http://ip:32400)",sc.base,v=>{sc.base=v.trim();saveSources();}));
-      const tk=field("X-Plex-Token (stays on this device)",sc.token,v=>{sc.token=v.trim();saveSources();});
+      fields.push(field("Plex username / email (optional)",sc.user||"",v=>{sc.user=v.trim();sc.token="";saveSources();}));
+      const pw=field("Plex password (optional — auto-gets token)",sc.pass||"",v=>{sc.pass=v;sc.token="";saveSources();}); pw.type="password"; fields.push(pw);
+      const tk=field("…or paste X-Plex-Token",sc.token,v=>{sc.token=v.trim();saveSources();});
       tk.type="password"; fields.push(tk);
+    }
+    if(sc.kind==="plexfree"){
+      fields.push(field("Plex username / email",sc.user||"",v=>{sc.user=v.trim();sc.token="";saveSources();}));
+      const pw=field("Plex password",sc.pass||"",v=>{sc.pass=v;sc.token="";saveSources();}); pw.type="password"; fields.push(pw);
+      const tk=field("…or paste X-Plex-Token",sc.token,v=>{sc.token=v.trim();saveSources();}); fields.push(tk);
+    }
+    if(sc.kind==="emby"||sc.kind==="jellyfin"){
+      const nm = sc.kind==="emby" ? "Emby" : "Jellyfin";
+      fields.push(field(nm+" base URL (http://ip:8096)",sc.base,v=>{sc.base=v.trim();saveSources();}));
+      fields.push(field("Username",sc.user||"",v=>{sc.user=v.trim();sc.token="";saveSources();}));
+      const pw=field("Password",sc.pass||"",v=>{sc.pass=v;sc.token="";saveSources();}); pw.type="password"; fields.push(pw);
+      const tk=field("…or paste an API key instead",sc.token,v=>{sc.token=v.trim();saveSources();}); tk.type="password"; fields.push(tk);
     }
     if(sc.kind==="chaturbate-tag"){
       fields.push(field("Tag (e.g. milf)",sc.tagPath,v=>{sc.tagPath=v.trim();saveSources();}));
@@ -188,6 +209,9 @@ function addSource(kind){
   if(kind==="app") sources.push({kind:"app",title:"App",pkg:"",intent:"",color:c});
   if(kind==="feed") sources.push({kind:"feed",title:"New feed",feed:"",color:c});
   if(kind==="plex") sources.push({kind:"plex",title:"Plex",base:"http://:32400",token:"",color:c});
+  if(kind==="plexfree") sources.push({kind:"plexfree",title:"Plex Free",token:"",color:"#e5a00d"});
+  if(kind==="emby") sources.push({kind:"emby",title:"Emby",base:"http://:8096",token:"",color:"#52b54b"});
+  if(kind==="jellyfin") sources.push({kind:"jellyfin",title:"Jellyfin",base:"http://:8096",token:"",color:"#aa5cc3"});
   if(kind==="xcloud") sources.push({kind:"xcloud",title:"xCloud",siglId:"",color:c});
   if(kind==="chaturbate-tag") sources.push({kind:"chaturbate-tag", title:"Chaturbate", tagPath:"", genders:"", color:c});
   saveSources(); renderSources();
@@ -196,6 +220,9 @@ function initImportButton(){
   $("#addtile").onclick=()=>addSource("tile");
   $("#addfeed").onclick=()=>addSource("feed");
   $("#addplex").onclick=()=>addSource("plex");
+  $("#addplexfree").onclick=()=>addSource("plexfree");
+  $("#addemby").onclick=()=>addSource("emby");
+  $("#addjellyfin").onclick=()=>addSource("jellyfin");
   $("#addchaturbate").onclick=()=>addSource("chaturbate-tag");
   $("#addxcloud").onclick=()=>addSource("xcloud");
   $("#addapp").onclick=()=>addSource("app");
@@ -254,6 +281,8 @@ async function enterSource(sc){
   try{
     if(sc.kind==="feed"){ const items=await loadFeed(sc.feed); pushLevel(items.map(itemNode)); }
     else if(sc.kind==="plex"){ await enterPlex(sc); }
+    else if(sc.kind==="plexfree"){ await enterPlexFree(sc); }
+    else if(sc.kind==="emby"||sc.kind==="jellyfin"){ await enterEmby(sc); }
   }catch(e){ flash("Failed: "+(e.message||e)); }
   navBusy=false; navMsg="";
 }
@@ -315,7 +344,9 @@ async function enterChaturbateTag(sc){
 // Try direct fetch first, then fall back through proxies (returns parsed JSON).
 async function proxiedJson(url){
   const custom=(function(){try{return localStorage.getItem("cbProxy")}catch(_){return null}})();
+  const media=(function(){try{return localStorage.getItem("mediaProxy")}catch(_){return null}})();
   const builders=[ u=>u ];
+  if(media)  builders.push(u=>media+encodeURIComponent(u));   // your local proxy (reliable)
   if(custom) builders.push(u=>custom+encodeURIComponent(u));
   builders.push(
     u=>"https://api.codetabs.com/v1/proxy/?quest="+encodeURIComponent(u),
@@ -380,6 +411,22 @@ async function loadFeed(url){
   const j=await r.json(); if(!Array.isArray(j)) throw new Error("feed not an array"); return j;
 }
 
+async function plexLogin(sc){
+  if(sc.token) return sc.token;
+  if(!sc.user || !sc.pass) throw new Error("set username + password (or token)");
+  const cid = "vrcat-"+(localStorage.getItem("plexCID")||(function(){const x=Math.random().toString(36).slice(2);try{localStorage.setItem("plexCID",x)}catch(_){}!x;return x;})());
+  const body = "user[login]="+encodeURIComponent(sc.user)+"&user[password]="+encodeURIComponent(sc.pass);
+  const r = await fetch("https://plex.tv/users/sign_in.json", { method:"POST",
+    headers:{ "Content-Type":"application/x-www-form-urlencoded", "Accept":"application/json",
+      "X-Plex-Client-Identifier":cid, "X-Plex-Product":"vrcat", "X-Plex-Version":"1.0" },
+    body });
+  if(!r.ok) throw new Error("Plex login HTTP "+r.status+(r.status===401?" (bad user/pass)":""));
+  const j = await r.json();
+  const tok = j && j.user && j.user.authToken;
+  if(!tok) throw new Error("Plex login: no token");
+  sc.token = tok; saveSources();   // cache so we don't log in every time
+  return tok;
+}
 async function plexGet(base, path, token){
   const sep = path.includes("?")?"&":"?";
   const r = await fetch(base+path+sep+"X-Plex-Token="+encodeURIComponent(token),
@@ -398,6 +445,271 @@ const OK_CONTAINER=["mp4","mov","m4v","webm"];
 const OK_VCODEC=["h264","avc"];
 const OK_ACODEC=["aac","mp3","opus","vorbis"];
 function plexPlayable(t){ return t==="movie"||t==="episode"||t==="clip"||t==="track"; }
+
+/* ---------------- Plex Free (ad-supported Movies & TV via provider) ---------------- */
+const PLEXVOD = "https://vod.provider.plex.tv";
+function plexCID(){
+  let x = localStorage.getItem("plexCID");
+  if(!x){ x = Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2); try{ localStorage.setItem("plexCID", x); }catch(_){ } }
+  return x;
+}
+function plexProviderParams(token){
+  // matches the app.plex.tv provider request as closely as possible
+  return "X-Plex-Product=" + encodeURIComponent("Plex Web")
+    + "&X-Plex-Version=4.160.0"
+    + "&X-Plex-Client-Identifier=" + encodeURIComponent(plexCID())
+    + "&X-Plex-Platform=Chrome&X-Plex-Platform-Version=152.0"
+    + "&X-Plex-Features=" + encodeURIComponent("external-media,indirect-media,hub-style-list")
+    + "&X-Plex-Model=standalone&X-Plex-Device=Windows"
+    + "&X-Plex-Device-Screen-Resolution=1098x618"
+    + "&X-Plex-Provider-Version=7.2&X-Plex-Text-Format=plain&X-Plex-Drm=widevine&X-Plex-Language=en"
+    + "&X-Plex-Token=" + encodeURIComponent(token);
+}
+async function plexVodGet(token, path){
+  const sep = path.includes("?") ? "&" : "?";
+  const raw = PLEXVOD + path + sep + plexProviderParams(token);
+  const mp = (function(){try{return (localStorage.getItem("mediaProxy")||"").trim()}catch(_){return ""}})();
+  // Prefer the media proxy: the provider checks origin/referer which a cross-site
+  // browser fetch can't set, but the proxy can. Fall back to direct if no proxy.
+  const attempts = mp ? [ mp + encodeURIComponent(raw), raw ] : [ raw ];
+  let last=null;
+  for(let i=0;i<attempts.length;i++){
+    try{
+      const r = await fetch(attempts[i], { headers:{ Accept:"application/json" } });
+      if(r.ok) return await r.json();
+      last = new Error("HTTP "+r.status);
+    }catch(e){ last=e; }
+  }
+  throw last || new Error("request failed");
+}
+function plexVodToken(sc){ return sc.token; }
+function plexVodThumb(token, it){
+  const t = it.thumb || it.art || (it.Image && it.Image[0] && it.Image[0].url);
+  if(!t) return null;
+  if(/^https?:/.test(t)) return t + (t.includes("?")?"&":"?") + "X-Plex-Token=" + encodeURIComponent(token);
+  return PLEXVOD + t + "?X-Plex-Token=" + encodeURIComponent(token);
+}
+async function enterPlexFree(sc){
+  navBusy=true; navMsg="Signing in\u2026";
+  try{
+    if(!sc.token) await plexLogin(sc);
+    const list = [
+      { title:"Movies", color:sc.color||"#e5a00d", thumb:null, act:()=>plexFreeSection(sc, "movies", "Movies") },
+      { title:"TV Shows", color:sc.color||"#e5a00d", thumb:null, act:()=>plexFreeSection(sc, "tv", "TV Shows") }
+    ];
+    pushLevel(list);
+  }catch(e){ flash("Plex Free: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+async function plexFreeSection(sc, section, title){
+  navBusy=true; navMsg="Loading "+title+"\u2026";
+  try{
+    const j = await plexVodGet(sc.token, "/hubs/sections/"+section+"?count=20&includeMeta=1&includeStations=1");
+    const mc = j.MediaContainer || {};
+    const hubs = mc.Hub || [];
+    let list = hubs.map(h => ({
+      title: h.title || h.hubIdentifier || "Row",
+      color:"#2a3441", thumb:null,
+      act: ()=>plexFreeHub(sc, section, h)
+    }));
+    // some responses return items directly instead of hubs
+    if(!list.length && mc.Metadata){
+      list = mc.Metadata.map(it => ({
+        title: it.title||"\u2014", color:"#2a3441", thumb: plexVodThumb(sc.token, it),
+        act: (it.type==="show") ? (()=>plexFreeChildren(sc, it)) : (()=>plexFreeOpen(sc, it))
+      }));
+    }
+    if(!list.length){ flash("Plex Free: empty (check token)"); }
+    pushLevel(list);
+  }catch(e){ flash("Plex Free: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+async function plexFreeHub(sc, section, hub){
+  navBusy=true; navMsg="Loading "+(hub.title||"")+"\u2026";
+  try{
+    let items = (hub.Metadata && hub.Metadata.length) ? hub.Metadata : null;
+    if(!items){
+      let path;
+      if(hub.key){ path = hub.key.charAt(0)==="/" ? hub.key : "/"+hub.key; }
+      else { path = "/hubs/sections/"+section+"/"+encodeURIComponent(hub.hubIdentifier||hub.context||""); }
+      path += (path.includes("?")?"&":"?") + "contentDirectoryID="+section
+            + "&includeMeta=1&X-Plex-Container-Start=0&X-Plex-Container-Size=48";
+      const j = await plexVodGet(sc.token, path);
+      items = (j.MediaContainer && j.MediaContainer.Metadata) || [];
+    }
+    const list = (items||[]).map(it => ({
+      title: it.title || "\u2014", color:"#2a3441", thumb: plexVodThumb(sc.token, it),
+      act: (it.type==="show") ? (()=>plexFreeChildren(sc, it)) : (()=>plexFreeOpen(sc, it))
+    }));
+    if(!list.length){
+      flash("Empty. hub keys: " + Object.keys(hub).join(",") + " | id=" + (hub.hubIdentifier||"?") + " key=" + (hub.key||"?"));
+    }
+    pushLevel(list);
+  }catch(e){ flash("Plex Free hub: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+async function plexFreeChildren(sc, it){
+  navBusy=true; navMsg="Loading "+(it.title||"")+"\u2026";
+  try{
+    const key = it.key || ("/library/metadata/"+it.ratingKey+"/children");
+    const j = await plexVodGet(sc.token, key);
+    const items = (j.MediaContainer && j.MediaContainer.Metadata) || [];
+    const list = items.map(c => ({
+      title: (c.index?("E"+c.index+" "):"") + (c.title||""), color:"#2a3441", thumb: plexVodThumb(sc.token, c),
+      act: (c.type==="season"||c.type==="show") ? (()=>plexFreeChildren(sc, c)) : (()=>plexFreeOpen(sc, c))
+    }));
+    pushLevel(list);
+  }catch(e){ flash("Plex Free: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+function plexFreeOpen(sc, it){
+  // open the Plex web player for this item — it handles the ad-supported stream,
+  // and firefly shades the resulting <video>.
+  const rk = it.ratingKey || (it.key && it.key.replace(/\D+/g,""));
+  const url = "https://app.plex.tv/desktop/#!/provider/tv.plex.provider.vod/details?key="
+    + encodeURIComponent("/library/metadata/"+rk) + "&X-Plex-Token=" + encodeURIComponent(sc.token);
+  openUrl(url);
+}
+
+/* ---------------- Emby / Jellyfin (shared API) ---------------- */
+const _embyUserCache = {};
+const _embyPrefix = {};
+function mediaProxyBase(){ try{ return (localStorage.getItem("mediaProxy")||"").trim(); }catch(_){ return ""; } }
+function viaMediaProxy(u){ const pr=mediaProxyBase(); return pr ? (pr + encodeURIComponent(u)) : u; }
+function embyRoot(sc){ return sc.base.replace(/\/*$/,""); }
+async function embyTry(sc, prefix, path){  // has 8s timeout
+  const sep = path.includes("?") ? "&" : "?";
+  const raw = embyRoot(sc) + prefix + path + sep + "api_key=" + encodeURIComponent(sc.token);
+  const url = viaMediaProxy(raw);
+  const auth = 'MediaBrowser Client="vrcat", Device="vrcat", DeviceId="vrcat", Version="1.0", Token="' + sc.token + '"';
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), 8000);
+  try{
+    return await fetch(url, { signal: ctl.signal, headers:{
+      "Accept":"application/json",
+      "X-Emby-Token": sc.token,
+      "X-MediaBrowser-Token": sc.token,
+      "X-Emby-Authorization": auth
+    }});
+  } finally { clearTimeout(timer); }
+}
+async function embyGet(sc, path){
+  const known = _embyPrefix[sc.base];
+  const order = known!=null ? [known] : ["", "/emby"];
+  let last=null;
+  for(let i=0;i<order.length;i++){
+    const pfx = order[i];
+    let r;
+    try{ r = await embyTry(sc, pfx, path); }catch(e){ last=e; continue; }
+    if(r.ok){ _embyPrefix[sc.base]=pfx; return r.json(); }
+    if(r.status===401){ last=new Error("HTTP 401 (API key rejected)"); continue; }
+    last=new Error("HTTP "+r.status);
+  }
+  throw last || new Error("request failed");
+}
+async function embyLogin(sc){
+  if(sc.token) return;
+  if(!sc.user || !sc.pass) throw new Error("set username + password (or API key)");
+  const auth = 'MediaBrowser Client="vrcat", Device="vrcat", DeviceId="vrcat", Version="1.0"';
+  const known = _embyPrefix[sc.base];
+  const order = known!=null ? [known] : ["", "/emby"];
+  let last=null;
+  for(let i=0;i<order.length;i++){
+    const pfx = order[i];
+    const raw = embyRoot(sc) + pfx + "/Users/AuthenticateByName";
+    const url = viaMediaProxy(raw);
+    const ctl = new AbortController(); const timer=setTimeout(()=>ctl.abort(),8000);
+    try{
+      const r = await fetch(url, { method:"POST", signal:ctl.signal,
+        headers:{ "Content-Type":"application/json", "Accept":"application/json", "X-Emby-Authorization":auth },
+        body: JSON.stringify({ Username: sc.user, Pw: sc.pass }) });
+      if(r.ok){
+        const j = await r.json();
+        const tok = j && (j.AccessToken || j.accessToken);
+        const uid = j && j.User && (j.User.Id||j.User.id);
+        if(tok){ sc.token=tok; if(uid) _embyUserCache[sc.base]=uid; _embyPrefix[sc.base]=pfx; saveSources(); return; }
+        last=new Error("no token in response");
+      } else if(r.status===401){ last=new Error("bad username/password"); }
+      else last=new Error("HTTP "+r.status);
+    }catch(e){ last=e; }
+    finally{ clearTimeout(timer); }
+  }
+  throw last || new Error("login failed");
+}
+async function embyUser(sc){
+  if(_embyUserCache[sc.base]) return _embyUserCache[sc.base];
+  const users = await embyGet(sc, "/Users");
+  const id = (users && users[0] && users[0].Id) || "";
+  _embyUserCache[sc.base] = id;
+  return id;
+}
+function embyImg(sc, it){
+  if(!it || !it.Id) return null;
+  return embyRoot(sc) + "/Items/" + it.Id + "/Images/Primary?maxWidth=320&quality=80&api_key=" + encodeURIComponent(sc.token);
+}
+function embyOpen(sc, it){
+  const root = embyRoot(sc), key = encodeURIComponent(sc.token);
+  const ms = it.MediaSources && it.MediaSources[0];
+  const msid = encodeURIComponent((ms && ms.Id) || it.Id);
+  let direct = false;
+  if(ms){
+    const cont = ((ms.Container||"")+"").toLowerCase();
+    const vs = (ms.MediaStreams||[]).find(x=>x.Type==="Video");
+    const as = (ms.MediaStreams||[]).find(x=>x.Type==="Audio");
+    const vok = !vs || OK_VCODEC.includes(((vs.Codec||"")+"").toLowerCase());
+    const aok = !as || OK_ACODEC.includes(((as.Codec||"")+"").toLowerCase());
+    direct = OK_CONTAINER.includes(cont) && vok && aok;
+  }
+  let url;
+  const sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  if(direct){
+    url = root + "/Videos/" + it.Id + "/stream?static=true&MediaSourceId=" + msid
+        + "&DeviceId=vrcat&PlaySessionId=" + sid + "&api_key=" + key;
+  } else {
+    url = root + "/Videos/" + it.Id + "/stream.mp4?MediaSourceId=" + msid
+        + "&DeviceId=vrcat&PlaySessionId=" + sid
+        + "&VideoCodec=h264&AudioCodec=aac&VideoBitrate=10000000&AudioBitrate=192000"
+        + "&MaxWidth=1920&TranscodingContainer=mp4&Static=false&api_key=" + key;
+  }
+  openUrl(url);
+}
+async function embyChildren(sc, uid, parentId, title){
+  navBusy=true; navMsg="Loading "+(title||"")+"\u2026";
+  try{
+    const j = await embyGet(sc, "/Users/"+uid+"/Items?ParentId="+encodeURIComponent(parentId)
+      +"&SortBy=SortName&SortOrder=Ascending&Fields=MediaSources&Limit=200");
+    const items = (j && j.Items) || [];
+    if(!items.length){ flash("Nothing inside "+(title||"")); navBusy=false; navMsg=""; return; }
+    const list = items.map(it => {
+      let label = it.Name || "\u2014";
+      if(it.Type==="Season")  label = it.Name || ("Season "+(it.IndexNumber||""));
+      else if(it.Type==="Episode") label = (it.IndexNumber?("E"+it.IndexNumber+" "):"") + (it.Name||"");
+      return {
+        title: label, color:"#2a3441", thumb: embyImg(sc, it),
+        act: it.IsFolder ? (()=>embyChildren(sc, uid, it.Id, it.Name)) : (()=>embyOpen(sc, it))
+      };
+    });
+    pushLevel(list);
+  }catch(e){ flash("Emby: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
+async function enterEmby(sc){
+  if(!sc.base){ flash("Set server URL in Settings"); return; }
+  navBusy=true; navMsg="Signing in\u2026";
+  try{
+    if(!sc.token) await embyLogin(sc);
+    const uid = await embyUser(sc);
+    if(!uid){ flash("No users found (check API key)"); navBusy=false; navMsg=""; return; }
+    const views = await embyGet(sc, "/Users/"+uid+"/Views");
+    const items = (views && views.Items) || [];
+    const list = items.map(v => ({
+      title:v.Name, color:(sc.color||"#52b54b"), thumb:embyImg(sc,v),
+      act: ()=>embyChildren(sc, uid, v.Id, v.Name)
+    }));
+    pushLevel(list);
+  }catch(e){ flash("Emby: "+(e.message||e)); }
+  navBusy=false; navMsg="";
+}
 async function plexChildren(sc, mid, it){
   navBusy=true; navMsg="Loading "+(it.title||"")+"\u2026";
   try{
@@ -453,7 +765,8 @@ async function plexOpen(sc, mid, it){
   }finally{ navBusy=false; navMsg=""; }
 }
 async function enterPlex(sc){
-  if(!sc.base || !sc.token){ flash("Set Plex base URL + token in Settings"); return; }
+  if(!sc.base){ flash("Set Plex base URL in Settings"); return; }
+  try{ if(!sc.token) await plexLogin(sc); }catch(e){ flash("Plex: "+(e.message||e)); return; }
   const j = await plexGet(sc.base, "/library/sections", sc.token);
   const secs = (j.MediaContainer && j.MediaContainer.Directory) || [];
   const list = secs.map(sec => ({ title:sec.title, color:"#e5a00d", thumb:null, act: ()=> enterPlexSection(sc, sec) }));
@@ -511,6 +824,12 @@ function checkSupport(){
     bits.push("⚠ NOT a secure context ("+location.protocol.replace(":","")+") — head tracking is BLOCKED. Serve over https or http://localhost.");
   w.textContent = bits.join("  ·  ");
 }
+function initMediaProxy(){
+  const inp=$("#mediaproxy"); if(!inp) return;
+  try{ inp.value = localStorage.getItem("mediaProxy") || ""; }catch(_){}
+  inp.oninput = e => { const v=e.target.value.trim();
+    try{ if(v) localStorage.setItem("mediaProxy", v); else localStorage.removeItem("mediaProxy"); }catch(_){} };
+}
 function initPlayerBase(){
   const inp=$("#playerbase"); if(!inp) return;
   try{ inp.value = localStorage.getItem("playerBase") || ""; }catch(_){}
@@ -530,7 +849,7 @@ function initLock(){
   cb.checked = !!tune.lock;
   cb.onchange = e => { tune.lock = e.target.checked?1:0; store.set("tune", tune); };
 }
-renderSources(); renderTune(); checkSupport(); initImportButton(); initCbProxy(); initLock(); initPlayerBase();
+renderSources(); renderTune(); checkSupport(); initImportButton(); initCbProxy(); initLock(); initPlayerBase(); initMediaProxy();
 
 /* ============================================================
    MATH (unchanged)
