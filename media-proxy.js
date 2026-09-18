@@ -79,11 +79,34 @@ http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
 
+  // Path-mounted mode for HLS: /s/<base64url-origin>/<path...>  — keeps relative
+  // segment URLs resolving correctly. Optional /s/<origin>/t/<token>/<path...> makes
+  // the proxy send the token as an Authorization header (Jellyfin user tokens).
+  if (req.url.indexOf("/s/") === 0) {
+    let rest = req.url.slice(3);
+    const slash = rest.indexOf("/");
+    const b64  = slash < 0 ? rest : rest.slice(0, slash);
+    let tail   = slash < 0 ? "" : rest.slice(slash);
+    let injectToken = null;
+    const m = tail.match(/^\/t\/([^/]+)(\/.*)$/);   // optional /t/<token>/...
+    if (m) { injectToken = decodeURIComponent(m[1]); tail = m[2]; }
+    let origin;
+    try { origin = Buffer.from(b64.replace(/-/g,"+").replace(/_/g,"/"), "base64").toString("utf8"); }
+    catch(_) { res.writeHead(400); return res.end("bad origin"); }
+    let target;
+    try { target = origin.replace(/\/+$/,"") + tail; new URL(target); }
+    catch(_) { res.writeHead(400); return res.end("bad target"); }
+    return forward(req, res, target, injectToken);
+  }
+
   let target;
   try { target = new URL(req.url, "http://localhost").searchParams.get("url"); }
   catch (_) { target = null; }
   if (!target) { res.writeHead(400); return res.end("missing ?url="); }
+  return forward(req, res, target);
+}).listen(PORT, () => console.log("media-proxy listening on http://0.0.0.0:" + PORT));
 
+function forward(req, res, target, injectToken) {
   let u;
   try { u = new URL(target); } catch (_) { res.writeHead(400); return res.end("bad url"); }
   if (!hostAllowed(u.hostname)) {
@@ -91,11 +114,18 @@ http.createServer((req, res) => {
   }
 
   const mod = u.protocol === "https:" ? https : httpN;
-  const opts = { method: req.method, headers: { "Accept":"application/json" } };
+  const opts = { method: req.method, headers: { "Accept":"*/*" } };
   if (u.protocol === "https:") opts.agent = insecureAgent;
+  if (injectToken) {
+    opts.headers["X-Emby-Token"] = injectToken;
+    opts.headers["X-MediaBrowser-Token"] = injectToken;
+    opts.headers["Authorization"] = 'MediaBrowser Client="vrcat", Device="vrcat", DeviceId="vrcat", Version="1.0", Token="' + injectToken + '"';
+    opts.headers["X-Emby-Authorization"] = opts.headers["Authorization"];
+  }
   if (req.headers["x-emby-token"])          opts.headers["X-Emby-Token"]         = req.headers["x-emby-token"];
   if (req.headers["x-mediabrowser-token"])  opts.headers["X-MediaBrowser-Token"] = req.headers["x-mediabrowser-token"];
   if (req.headers["x-emby-authorization"])  opts.headers["X-Emby-Authorization"] = req.headers["x-emby-authorization"];
+  if (req.headers["authorization"])         opts.headers["Authorization"]        = req.headers["authorization"];
   if (req.headers["content-type"])          opts.headers["Content-Type"]         = req.headers["content-type"];
   if (req.headers["content-length"])        opts.headers["Content-Length"]       = req.headers["content-length"];
   if (needsPlexOrigin(u.hostname)) {
@@ -108,17 +138,13 @@ http.createServer((req, res) => {
   const finish = (code, body) => { if(done) return; done = true; try{ res.writeHead(code, {"Content-Type":"application/json"}); res.end(body); }catch(_){} };
 
   const preq = mod.request(target, opts, (pres) => {
-    const chunks = [];
-    pres.on("data", c => chunks.push(c));
-    pres.on("end", () => {
-      if(done) return; done = true;
-      try{
-        res.writeHead(pres.statusCode || 502, { "Content-Type": pres.headers["content-type"] || "application/json" });
-        res.end(Buffer.concat(chunks));
-      }catch(_){}
-    });
+    if(done) return;
+    const h = { "Content-Type": pres.headers["content-type"] || "application/octet-stream" };
+    if(pres.headers["content-length"]) h["Content-Length"] = pres.headers["content-length"];
+    try{ res.writeHead(pres.statusCode || 502, h); done = true; pres.pipe(res); }
+    catch(_){ done = true; }
   });
   preq.setTimeout(UPSTREAM_TIMEOUT_MS, () => { preq.destroy(); finish(504, "upstream timeout: " + u.host); });
   preq.on("error", (e) => finish(502, "upstream error: " + (e && e.message ? e.message : String(e))));
   if (req.method === "POST") req.pipe(preq); else preq.end();
-}).listen(PORT, () => console.log("media-proxy listening on http://0.0.0.0:" + PORT));
+}

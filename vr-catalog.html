@@ -574,33 +574,29 @@ const _embyPrefix = {};
 function mediaProxyBase(){ try{ return (localStorage.getItem("mediaProxy")||"").trim(); }catch(_){ return ""; } }
 function viaMediaProxy(u){ const pr=mediaProxyBase(); return pr ? (pr + encodeURIComponent(u)) : u; }
 function embyRoot(sc){ return sc.base.replace(/\/*$/,""); }
-async function embyTry(sc, prefix, path){  // has 8s timeout
+async function embyTry(sc, prefix, path){  // direct first, media proxy only on failure
   const sep = path.includes("?") ? "&" : "?";
   const raw = embyRoot(sc) + prefix + path + sep + "api_key=" + encodeURIComponent(sc.token);
-  const url = viaMediaProxy(raw);
   const auth = 'MediaBrowser Client="vrcat", Device="vrcat", DeviceId="vrcat", Version="1.0", Token="' + sc.token + '"';
-  const ctl = new AbortController();
-  const timer = setTimeout(()=>ctl.abort(), 8000);
-  try{
-    return await fetch(url, { signal: ctl.signal, headers:{
-      "Accept":"application/json",
-      "X-Emby-Token": sc.token,
-      "X-MediaBrowser-Token": sc.token,
-      "X-Emby-Authorization": auth
-    }});
-  } finally { clearTimeout(timer); }
+  const opts = { headers:{ "Accept":"application/json", "X-Emby-Token": sc.token,
+    "X-MediaBrowser-Token": sc.token, "X-Emby-Authorization": auth, "Authorization": auth } };
+  const doFetch = (u)=>{ const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),8000);
+    return fetch(u,Object.assign({signal:ctl.signal},opts)).finally(()=>clearTimeout(t)); };
+  const mp = mediaProxyBase();
+  try{ return await doFetch(raw); }
+  catch(e){ if(mp) return await doFetch(mp + encodeURIComponent(raw)); throw e; }
 }
 async function embyGet(sc, path){
   const known = _embyPrefix[sc.base];
-  const order = known!=null ? [known] : ["", "/emby"];
+  const order = known!=null ? [known] : (sc.kind==="jellyfin" ? [""] : ["", "/emby"]);
   let last=null;
   for(let i=0;i<order.length;i++){
     const pfx = order[i];
     let r;
     try{ r = await embyTry(sc, pfx, path); }catch(e){ last=e; continue; }
     if(r.ok){ _embyPrefix[sc.base]=pfx; return r.json(); }
-    if(r.status===401){ last=new Error("HTTP 401 (API key rejected)"); continue; }
-    last=new Error("HTTP "+r.status);
+    if(r.status===401){ last=new Error("HTTP 401 (login/key rejected)"); continue; }
+    last=new Error("HTTP "+r.status+" @ "+pfx+path.split("?")[0]);
   }
   throw last || new Error("request failed");
 }
@@ -609,17 +605,21 @@ async function embyLogin(sc){
   if(!sc.user || !sc.pass) throw new Error("set username + password (or API key)");
   const auth = 'MediaBrowser Client="vrcat", Device="vrcat", DeviceId="vrcat", Version="1.0"';
   const known = _embyPrefix[sc.base];
-  const order = known!=null ? [known] : ["", "/emby"];
+  const order = known!=null ? [known] : (sc.kind==="jellyfin" ? [""] : ["", "/emby"]);
   let last=null;
   for(let i=0;i<order.length;i++){
     const pfx = order[i];
     const raw = embyRoot(sc) + pfx + "/Users/AuthenticateByName";
-    const url = viaMediaProxy(raw);
-    const ctl = new AbortController(); const timer=setTimeout(()=>ctl.abort(),8000);
+    const body = JSON.stringify({ Username: sc.user, Pw: sc.pass });
+    const hdrs = { "Content-Type":"application/json", "Accept":"application/json",
+                   "X-Emby-Authorization":auth, "Authorization":auth };
+    const doPost = (u)=>{ const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),8000);
+      return fetch(u,{ method:"POST", signal:ctl.signal, headers:hdrs, body }).finally(()=>clearTimeout(t)); };
+    const mp = mediaProxyBase();
+    let r=null;
+    try{ r = await doPost(raw); }
+    catch(e){ if(mp){ try{ r = await doPost(mp + encodeURIComponent(raw)); }catch(e2){ last=e2; continue; } } else { last=e; continue; } }
     try{
-      const r = await fetch(url, { method:"POST", signal:ctl.signal,
-        headers:{ "Content-Type":"application/json", "Accept":"application/json", "X-Emby-Authorization":auth },
-        body: JSON.stringify({ Username: sc.user, Pw: sc.pass }) });
       if(r.ok){
         const j = await r.json();
         const tok = j && (j.AccessToken || j.accessToken);
@@ -627,9 +627,8 @@ async function embyLogin(sc){
         if(tok){ sc.token=tok; if(uid) _embyUserCache[sc.base]=uid; _embyPrefix[sc.base]=pfx; saveSources(); return; }
         last=new Error("no token in response");
       } else if(r.status===401){ last=new Error("bad username/password"); }
-      else last=new Error("HTTP "+r.status);
+      else last=new Error("HTTP "+r.status+" @ "+pfx+"/Users/AuthenticateByName");
     }catch(e){ last=e; }
-    finally{ clearTimeout(timer); }
   }
   throw last || new Error("login failed");
 }
@@ -648,27 +647,35 @@ function embyOpen(sc, it){
   const root = embyRoot(sc), key = encodeURIComponent(sc.token);
   const ms = it.MediaSources && it.MediaSources[0];
   const msid = encodeURIComponent((ms && ms.Id) || it.Id);
-  let direct = false;
-  if(ms){
-    const cont = ((ms.Container||"")+"").toLowerCase();
-    const vs = (ms.MediaStreams||[]).find(x=>x.Type==="Video");
-    const as = (ms.MediaStreams||[]).find(x=>x.Type==="Audio");
-    const vok = !vs || OK_VCODEC.includes(((vs.Codec||"")+"").toLowerCase());
-    const aok = !as || OK_ACODEC.includes(((as.Codec||"")+"").toLowerCase());
-    direct = OK_CONTAINER.includes(cont) && vok && aok;
-  }
-  let url;
   const sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-  if(direct){
-    url = root + "/Videos/" + it.Id + "/stream?static=true&MediaSourceId=" + msid
-        + "&DeviceId=vrcat&PlaySessionId=" + sid + "&api_key=" + key;
-  } else {
-    url = root + "/Videos/" + it.Id + "/stream.mp4?MediaSourceId=" + msid
-        + "&DeviceId=vrcat&PlaySessionId=" + sid
-        + "&VideoCodec=h264&AudioCodec=aac&VideoBitrate=10000000&AudioBitrate=192000"
-        + "&MaxWidth=1920&TranscodingContainer=mp4&Static=false&api_key=" + key;
+  // pick English audio track (Emby/Jellyfin default to the first one)
+  let audIdx = null;
+  if(ms && ms.MediaStreams){
+    const auds = ms.MediaStreams.filter(x => x.Type==="Audio");
+    const eng = auds.find(x => /^(eng|en)\b/i.test(((x.Language||"")+"")))
+             || auds.find(x => /english/i.test(((x.DisplayTitle||x.Title||"")+"")));
+    if(eng && typeof eng.Index === "number") audIdx = eng.Index;
   }
-  openUrl(url);
+  const hlsPath = "/Videos/" + it.Id + "/master.m3u8?MediaSourceId=" + msid
+        + "&DeviceId=vrcat&PlaySessionId=" + sid
+        + "&VideoCodec=h264&AudioCodec=aac,mp3&TranscodingProtocol=hls&TranscodingContainer=ts"
+        + "&VideoBitrate=12000000&AudioBitrate=256000&MaxWidth=1920"
+        + (audIdx!=null ? "&AudioStreamIndex=" + audIdx : "");
+  // Route through the path-mounted proxy (/s/<b64 origin>/t/<token>/...) so hls.js
+  // gets past CORS / self-signed cert, relative segment URLs resolve, and the proxy
+  // injects the token as an Authorization header (Jellyfin user tokens).
+  const mp = mediaProxyBase();   // e.g. http://127.0.0.1:8877/?url=
+  let src;
+  if(mp){
+    const origin = mp.replace(/\/?\?url=$/,"").replace(/\/+$/,"");   // http://127.0.0.1:8877
+    const b64 = btoa(unescape(encodeURIComponent(root))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    src = origin + "/s/" + b64 + "/t/" + encodeURIComponent(sc.token) + hlsPath;
+  } else {
+    src = root + hlsPath + "&api_key=" + key;
+  }
+  const pb = (function(){try{return (localStorage.getItem("playerBase")||"").trim()}catch(_){return ""}})();
+  const baseHref = pb ? pb.replace(/\/*$/,"/") : new URL(".", location.href).href;
+  openUrl(baseHref + "play.html?src=" + encodeURIComponent(src) + "&hls=1");
 }
 async function embyChildren(sc, uid, parentId, title){
   navBusy=true; navMsg="Loading "+(title||"")+"\u2026";
@@ -692,19 +699,23 @@ async function embyChildren(sc, uid, parentId, title){
 }
 async function enterEmby(sc){
   if(!sc.base){ flash("Set server URL in Settings"); return; }
-  navBusy=true; navMsg="Signing in\u2026";
+  navBusy=true; let step="login";
   try{
+    navMsg="Signing in\u2026";
     if(!sc.token) await embyLogin(sc);
+    step="user"; navMsg="Getting user\u2026";
     const uid = await embyUser(sc);
-    if(!uid){ flash("No users found (check API key)"); navBusy=false; navMsg=""; return; }
+    if(!uid){ throw new Error("no user id returned"); }
+    step="views"; navMsg="Loading libraries\u2026";
     const views = await embyGet(sc, "/Users/"+uid+"/Views");
     const items = (views && views.Items) || [];
+    if(!items.length){ throw new Error("0 libraries (uid="+uid+")"); }
     const list = items.map(v => ({
       title:v.Name, color:(sc.color||"#52b54b"), thumb:embyImg(sc,v),
       act: ()=>embyChildren(sc, uid, v.Id, v.Name)
     }));
     pushLevel(list);
-  }catch(e){ flash("Emby: "+(e.message||e)); }
+  }catch(e){ flash("JF ["+step+"]: "+(e.message||e)); }
   navBusy=false; navMsg="";
 }
 async function plexChildren(sc, mid, it){

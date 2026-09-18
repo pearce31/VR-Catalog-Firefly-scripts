@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<video id="v" playsinline controls autoplay></video>
+<video id="v" playsinline controls autoplay crossorigin="anonymous"></video>
 <div id="msg">Requesting transcode…</div>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 <script>
@@ -24,7 +24,34 @@
   const v = document.getElementById("v"), msg = document.getElementById("msg");
   const show = t => { msg.textContent = t; msg.style.display = "flex"; };
   const hide = () => { msg.style.display = "none"; };
-  if(!BASE || !TOKEN || !KEY){ show("Missing params (b/t/k)"); return; }
+  if(!BASE || !TOKEN || !KEY){
+    // Generic mode: play any HLS/MP4 URL directly (Emby/Jellyfin). ?src=<url>&hls=1
+    const SRC = q.get("src");
+    if(SRC){
+      const isHls = q.get("hls")==="1" || /\.m3u8(\?|$)/i.test(SRC);
+      v.addEventListener("playing", hide);
+      v.addEventListener("timeupdate", ()=>{ if(v.currentTime>0) hide(); });
+      const playSrc = ()=>{
+        if(isHls){
+          if(window.Hls && Hls.isSupported()){
+            const hls = new Hls();
+            hls.on(Hls.Events.ERROR,(e,d)=>{ if(d&&d.fatal) show("HLS "+d.type+" / "+(d.details||"")); });
+            hls.on(Hls.Events.MANIFEST_PARSED,()=>{ hide(); v.play().catch(()=>show("Tap / click to play")); });
+            hls.loadSource(SRC); hls.attachMedia(v);
+          } else if(v.canPlayType("application/vnd.apple.mpegurl")){
+            v.src=SRC; hide(); v.play().catch(()=>show("Tap / click to play"));
+          } else show("HLS not supported here");
+        } else {
+          v.src=SRC; hide(); v.play().catch(()=>show("Tap / click to play"));
+        }
+      };
+      if(isHls && !window.Hls){
+        let w=0; const iv=setInterval(()=>{ if(window.Hls){clearInterval(iv);playSrc();} else if((w+=200)>6000){clearInterval(iv);show("hls.js failed to load");} },200);
+      } else playSrc();
+      return;
+    }
+    show("Missing params (b/t/k or src)"); return;
+  }
 
   // Match Plex Web's real request. hasMDE=1 -> must call /decision first.
   // directStreamAudio=0 -> transcode AC3/DTS to AAC (sound). HLS so hls.js can play it.
@@ -32,7 +59,7 @@
   const SID = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const common = {
     hasMDE: "1", path: KEY, mediaIndex: "0", partIndex: "0",
-    protocol: "hls", fastSeek: "1", directPlay: "0", directStream: "0",
+    protocol: "hls", fastSeek: "1", directPlay: "0", directStream: "1",
     subtitleSize: "100", audioBoost: "100", location: "lan",
     addDebugOverlay: "0", autoAdjustQuality: "0", directStreamAudio: "0",
     mediaBufferSize: "102400", session: SID, subtitles: "none",
@@ -49,8 +76,43 @@
     "X-Plex-Token": TOKEN
   };
   const qs = o => Object.keys(o).map(k => encodeURIComponent(k)+"="+encodeURIComponent(o[k])).join("&");
-  const decisionUrl = BASE + "/video/:/transcode/universal/decision?" + qs(common);
-  const startUrl    = BASE + "/video/:/transcode/universal/start.m3u8?" + qs(common);
+  const MP = q.get("mp");   // optional media-proxy origin, e.g. http://127.0.0.1:8877
+  function pathMount(fullUrl){
+    if(!MP) return fullUrl;
+    try{ const u=new URL(fullUrl);
+      const b64=btoa(unescape(encodeURIComponent(u.origin))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+      return MP.replace(/\/+$/,"") + "/s/" + b64 + u.pathname + u.search;
+    }catch(_){ return fullUrl; }
+  }
+  let decisionUrl, startUrl;
+  function buildUrls(){
+    decisionUrl = BASE + "/video/:/transcode/universal/decision?" + qs(common);
+    startUrl    = pathMount(BASE + "/video/:/transcode/universal/start.m3u8?" + qs(common));
+  }
+  buildUrls();
+  // Pick the English audio track (Plex otherwise defaults to track 0)
+  async function pickEnglishAudio(){
+    try{
+      const mr = await fetch(BASE + KEY + (KEY.indexOf("?")<0?"?":"&") + "X-Plex-Token=" + encodeURIComponent(TOKEN), { headers:{ Accept:"application/json" } });
+      if(!mr.ok) return;
+      const mj = await mr.json();
+      const md = mj.MediaContainer && mj.MediaContainer.Metadata && mj.MediaContainer.Metadata[0];
+      const part = md && md.Media && md.Media[0] && md.Media[0].Part && md.Media[0].Part[0];
+      const streams = (part && part.Stream) || [];
+      const auds = streams.filter(x => x.streamType===2);
+      const eng = auds.find(x => /^(eng|en)\b/i.test(((x.languageCode||x.language||"")+"")))
+               || auds.find(x => /english/i.test(((x.language||"")+"")));
+      if(eng && eng.id){
+        common.audioStreamID = String(eng.id);
+        buildUrls();
+        // Also select it on the part server-side (Plex honors this over the param)
+        if(part && part.id){
+          try{ await fetch(BASE + "/library/parts/" + part.id + "?audioStreamID=" + encodeURIComponent(eng.id)
+              + "&X-Plex-Token=" + encodeURIComponent(TOKEN), { method:"PUT" }); }catch(_){}
+        }
+      }
+    }catch(_){}
+  }
   const withTok = u => u.indexOf("X-Plex-Token=") >= 0 ? u
       : u + (u.indexOf("?") < 0 ? "?" : "&") + "X-Plex-Token=" + encodeURIComponent(TOKEN);
 
@@ -61,14 +123,38 @@
 
   function play(){
     if(window.Hls && Hls.isSupported()){
-      const hls = new Hls({ xhrSetup:(xhr,url)=>{ xhr.open("GET", withTok(url), true); } });
-      hls.on(Hls.Events.ERROR, (e,d)=>{
-        if(d && d.fatal){
-          const code = d.response ? (" HTTP "+(d.response.code||"?")) : "";
-          show("HLS " + d.type + " / " + (d.details||"") + code);
-        }
+      const hls = new Hls({
+        xhrSetup:(xhr,url)=>{ xhr.open("GET", withTok(url), true); },
+        fragLoadingTimeOut: 60000,
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 1000,
+        manifestLoadingTimeOut: 30000,
+        levelLoadingTimeOut: 30000,
+        maxBufferLength: 60,              // deep cushion for high-bitrate stream-copy
+        maxMaxBufferLength: 600,
+        maxBufferSize: 200*1000*1000,    // 200MB so high-bitrate video buffers far ahead
+        backBufferLength: 30,
+        maxBufferHole: 1,
+        highBufferWatchdogPeriod: 3,
+        nudgeMaxRetry: 20,               // keep nudging past stalls instead of dying
+        lowLatencyMode: false
       });
-      hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ v.play().catch(()=>show("Tap / click to play")); });
+      // auto-recover: if playback stalls waiting on the transcoder, nudge it along
+      let stallT=null;
+      v.addEventListener("waiting", ()=>{ clearTimeout(stallT);
+        stallT=setTimeout(()=>{ if(v.readyState<3 && !v.paused){ try{ v.currentTime += 0.1; }catch(_){} v.play().catch(()=>{}); } }, 4000); });
+      v.addEventListener("playing", ()=>{ clearTimeout(stallT); hide(); });
+      let sawManifest=false, sawFrag=false;
+      hls.on(Hls.Events.MANIFEST_LOADING, ()=>show("Loading manifest…"));
+      hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ sawManifest=true; show("Manifest OK — starting…"); v.play().catch(()=>show("Tap / click to play")); });
+      hls.on(Hls.Events.FRAG_LOADED, ()=>{ if(!sawFrag){ sawFrag=true; hide(); } });
+      hls.on(Hls.Events.ERROR, (e,d)=>{
+        const code = d && d.response ? (" HTTP "+(d.response.code||"?")) : "";
+        if(d && d.fatal){ show("HLS " + d.type + " / " + (d.details||"") + code); }
+        // non-fatal (bufferFull, nudge, etc.) are normal — ignore them
+      });
+      setTimeout(()=>{ if(!sawManifest) show("Stuck: no manifest (transcode not starting on Plex)"); }, 15000);
+      setTimeout(()=>{ if(sawManifest && !sawFrag) show("Stuck: manifest OK but no video segments"); }, 20000);
       hls.loadSource(startUrl); hls.attachMedia(v);
     } else if(v.canPlayType("application/vnd.apple.mpegurl")){
       v.src = startUrl; v.play().catch(()=>show("Tap / click to play"));
@@ -76,15 +162,25 @@
   }
 
   async function run(){
-    // Step 1: MDE decision (required when hasMDE=1)
+    await pickEnglishAudio();
+    // Step 1: MDE decision — and read what Plex actually chose (direct vs transcode)
+    let dec = null;
     try{
-      const r = await fetch(decisionUrl, { cache:"no-store" });
+      const ctl = new AbortController();
+      const timer = setTimeout(()=>ctl.abort(), 12000);
+      let r;
+      try{ r = await fetch(decisionUrl, { cache:"no-store", signal:ctl.signal, headers:{ Accept:"application/json" } }); }
+      finally{ clearTimeout(timer); }
       if(!r.ok){ show("Decision refused:\nHTTP "+r.status+" "+r.statusText+"\n"+(await safeText(r))); return; }
+      try{ dec = await r.json(); }catch(_){ dec = null; }
     }catch(e){
-      show("Decision unreachable:\n"+(e && e.message ? e.message : e)); return;
+      const em = (e && e.name==="AbortError") ? "timed out (server unreachable / wrong URL / mixed content)" : (e && e.message ? e.message : e);
+      show("Decision unreachable:\n"+em); return;
     }
-    // Step 2: play the transcoded HLS
-    hide(); play();
+    // Step 2: video is stream-copied + audio transcoded to AAC, delivered as HLS.
+    // hls.js feeds same-origin blobs so firefly can read the pixels (no taint).
+    hide();
+    play();
   }
 
   if(window.Hls){ run(); }
