@@ -62,11 +62,12 @@
     protocol: "hls", fastSeek: "1", directPlay: "0", directStream: "1",
     subtitleSize: "100", audioBoost: "100", location: "lan",
     addDebugOverlay: "0", autoAdjustQuality: "0", directStreamAudio: "0",
+    audioChannels: "2",
     mediaBufferSize: "102400", session: SID, subtitles: "none",
     "Accept-Language": "en",
     "X-Plex-Session-Identifier": SID,
     "X-Plex-Client-Profile-Extra":
-      "append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=h264&audioCodec=aac&protocol=hls)",
+      "append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=h264&audioCodec=aac&protocol=hls)+add-limitation(scope=videoAudioCodec&scopeName=aac&type=upperBound&name=audio.channels&value=2&isRequired=true)",
     "X-Plex-Incomplete-Segments": "1",
     "X-Plex-Product": "Plex Web", "X-Plex-Version": "4.160.0",
     "X-Plex-Client-Identifier": CID,
@@ -100,8 +101,20 @@
       const part = md && md.Media && md.Media[0] && md.Media[0].Part && md.Media[0].Part[0];
       const streams = (part && part.Stream) || [];
       const auds = streams.filter(x => x.streamType===2);
-      const eng = auds.find(x => /^(eng|en)\b/i.test(((x.languageCode||x.language||"")+"")))
-               || auds.find(x => /english/i.test(((x.language||"")+"")));
+      const isEng = x => /^(eng|en)\b/i.test(((x.languageCode||"")+"")) || /english/i.test(((x.language||"")+""));
+      const isBad = x => /(comment|descri|\bad\b|audio desc|sdh|hearing|narrat|karaoke|m&e|effects)/i
+                         .test(((x.extendedDisplayTitle||x.displayTitle||x.title||"")+""));
+      let eng = auds.find(x => (x.selected||x.default) && isEng(x) && !isBad(x));   // Plex's chosen main track
+      if(!eng){
+        const good = auds.filter(x => isEng(x) && !isBad(x));
+        good.sort((a,b)=> (b.channels||0)-(a.channels||0));   // main mix has most channels
+        eng = good[0];
+      }
+      if(!eng) eng = auds.find(isEng);
+      // brief readout so we can see the tracks + pick
+      show("tracks:\n" + auds.map(x=>((x.languageCode||x.language||"?"))+" ch"+(x.channels||"?")+(x.selected?"*":"")+" "+((x.extendedDisplayTitle||x.displayTitle||x.title||"")).slice(0,28)).join("\n")
+         + "\npicked: " + (eng ? ((eng.languageCode||eng.language)+" ch"+(eng.channels||"?")+"#"+eng.id) : "NONE"));
+      await new Promise(r=>setTimeout(r,3000));
       if(eng && eng.id){
         common.audioStreamID = String(eng.id);
         buildUrls();

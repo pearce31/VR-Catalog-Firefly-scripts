@@ -659,7 +659,8 @@ function embyOpen(sc, it){
   const hlsPath = "/Videos/" + it.Id + "/master.m3u8?MediaSourceId=" + msid
         + "&DeviceId=vrcat&PlaySessionId=" + sid
         + "&VideoCodec=h264&AudioCodec=aac,mp3&TranscodingProtocol=hls&TranscodingContainer=ts"
-        + "&VideoBitrate=12000000&AudioBitrate=256000&MaxWidth=1920"
+        + "&AudioChannels=2&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&AudioBitrate=256000"
+        + "&VideoBitrate=12000000&MaxWidth=1920"
         + (audIdx!=null ? "&AudioStreamIndex=" + audIdx : "");
   // Route through the path-mounted proxy (/s/<b64 origin>/t/<token>/...) so hls.js
   // gets past CORS / self-signed cert, relative segment URLs resolve, and the proxy
